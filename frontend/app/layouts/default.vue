@@ -23,16 +23,29 @@
           </svg>
           <span>项目</span>
         </NuxtLink>
-        <NuxtLink to="/settings" class="nav-link" :class="{ active: route.path === '/settings' }">
+        <NuxtLink v-if="isAdmin" to="/settings" class="nav-link" :class="{ active: route.path === '/settings' }">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
           <span>设置</span>
         </NuxtLink>
+        <NuxtLink v-if="isAdmin" to="/users" class="nav-link" :class="{ active: route.path === '/users' }">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>用户</span>
+        </NuxtLink>
       </nav>
 
       <div class="header-right">
+        <div v-if="user" class="user-box">
+          <span>{{ user.display_name || user.displayName || user.username }}</span>
+          <button class="logout-btn" @click="logout">退出</button>
+        </div>
         <div class="film-strip">
           <span class="film-frame"></span>
           <span class="film-frame"></span>
@@ -44,6 +57,7 @@
     <main class="content">
       <slot />
     </main>
+    <AssistantBubble v-if="user" />
   </div>
 </template>
 
@@ -52,6 +66,11 @@ import brandLogo from '~/assets/huobao-logo.png'
 
 const route = useRoute()
 const showBrandImage = ref(true)
+const { user, isAdmin, logout, load } = useAuth()
+
+onMounted(() => {
+  load()
+})
 </script>
 
 <style scoped>
@@ -135,6 +154,26 @@ const showBrandImage = ref(true)
 }
 
 .header-right { display: flex; align-items: center; margin-left: auto; }
+.user-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.logout-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  border-radius: var(--radius);
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.logout-btn:hover {
+  color: var(--text-0);
+  background: var(--bg-hover);
+}
 
 /* Film strip decoration */
 .film-strip {

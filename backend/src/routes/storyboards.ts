@@ -1,10 +1,12 @@
-import { Hono } from 'hono'
+﻿import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
-import { success, created, now, badRequest } from '../utils/response.js'
+import { success, created, now, badRequest, forbidden } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { generateTTS } from '../services/tts-generation.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { emitTaskEvent } from '../utils/events.js'
+import { canAccessEpisode, canAccessStoryboard } from '../utils/ownership.js'
 
 const app = new Hono()
 
@@ -68,6 +70,7 @@ function validateStoryboardBindings(episodeId: number, sceneId: number | null | 
 // POST /storyboards
 app.post('/', async (c) => {
   const body = await c.req.json()
+  if (!canAccessEpisode(c, Number(body.episode_id))) return forbidden(c)
   const ts = now()
   logTaskStart('StoryboardAPI', 'create', {
     episodeId: body.episode_id,
@@ -107,6 +110,7 @@ app.post('/', async (c) => {
 app.put('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const body = await c.req.json()
+  if (!canAccessStoryboard(c, id)) return forbidden(c)
   const [storyboard] = db.select().from(schema.storyboards).where(eq(schema.storyboards.id, id)).all()
   if (!storyboard) return badRequest(c, '镜头不存在')
   logTaskStart('StoryboardAPI', 'update', {
@@ -154,6 +158,9 @@ app.put('/:id', async (c) => {
 // POST /storyboards/:id/generate-tts
 app.post('/:id/generate-tts', async (c) => {
   const id = Number(c.req.param('id'))
+  if (!canAccessStoryboard(c, id)) return forbidden(c)
+  const body = await c.req.json().catch(() => ({}))
+  const requestedVoiceId = String(body?.voice_id || body?.voiceId || '').trim()
   const [sb] = db.select().from(schema.storyboards).where(eq(schema.storyboards.id, id)).all()
   if (!sb) return badRequest(c, '镜头不存在')
   const parsedDialogue = parseDialogueForTTS(sb.dialogue)
@@ -167,12 +174,13 @@ app.post('/:id/generate-tts', async (c) => {
     storyboardId: id,
     episodeId: sb.episodeId,
     dialogue: sb.dialogue,
+    requestedVoiceId: requestedVoiceId || undefined,
   })
 
-  let voiceId = 'alloy'
+  let voiceId = requestedVoiceId || 'Charon'
   const speaker = parsedDialogue.speaker
 
-  if (speaker) {
+  if (!requestedVoiceId && speaker) {
     if (!/^(旁白|画外音|narrator)$/i.test(speaker)) {
       const [ep] = db.select().from(schema.episodes).where(eq(schema.episodes.id, sb.episodeId)).all()
       if (ep) {
@@ -200,9 +208,26 @@ app.post('/:id/generate-tts', async (c) => {
       path: audioPath,
       textLength: pureDialogue.length,
     })
+    emitTaskEvent({
+      type: 'tts',
+      status: 'completed',
+      dramaId: ep?.dramaId,
+      episodeId: sb.episodeId,
+      storyboardId: id,
+      localPath: audioPath,
+      ttsAudioUrl: audioPath,
+    })
     return success(c, { tts_audio_url: audioPath, voice_id: voiceId, text: pureDialogue })
   } catch (err: any) {
     logTaskError('StoryboardAPI', 'generate-tts', { storyboardId: id, voiceId, error: err.message })
+    emitTaskEvent({
+      type: 'tts',
+      status: 'failed',
+      dramaId: ep?.dramaId,
+      episodeId: sb.episodeId,
+      storyboardId: id,
+      errorMsg: err.message,
+    })
     return badRequest(c, err.message)
   }
 })
@@ -210,6 +235,7 @@ app.post('/:id/generate-tts', async (c) => {
 // DELETE /storyboards/:id
 app.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'))
+  if (!canAccessStoryboard(c, id)) return forbidden(c)
   logTaskStart('StoryboardAPI', 'delete', { storyboardId: id })
   db.delete(schema.storyboardCharacters).where(eq(schema.storyboardCharacters.storyboardId, id)).run()
   db.delete(schema.storyboards).where(eq(schema.storyboards.id, id)).run()

@@ -1,4 +1,4 @@
-import { serve } from '@hono/node-server'
+﻿import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -11,10 +11,12 @@ import storyboards from './routes/storyboards.js'
 import scenes from './routes/scenes.js'
 import characters from './routes/characters.js'
 import images from './routes/images.js'
+import events from './routes/events.js'
 import videos from './routes/videos.js'
 import upload from './routes/upload.js'
 import aiConfigs, { aiProviders } from './routes/aiConfigs.js'
 import agentConfigs from './routes/agentConfigs.js'
+import agentPresets from './routes/agentPresets.js'
 import agent from './routes/agent.js'
 import compose from './routes/compose.js'
 import merge from './routes/merge.js'
@@ -22,18 +24,50 @@ import grid from './routes/grid.js'
 import skills from './routes/skills.js'
 import webhooks from './routes/webhooks.js'
 import aiVoices from './routes/aiVoices.js'
+import auth from './routes/auth.js'
+import assistant from './routes/assistant.js'
 import { requestLogger, errorHandler } from './middleware/logger.js'
+import { requireAuth } from './middleware/auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '../..')
 
 const app = new Hono()
 
+function splitEnvList(value: string | undefined, fallback: string[]): string[] {
+  const items = (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return items.length ? items : fallback
+}
+
+const serverPort = Number(process.env.PORT || 5679)
+const host = process.env.HOST || '127.0.0.1'
+const defaultOrigins = [
+  'http://localhost:3013',
+  'http://127.0.0.1:3013',
+  `http://localhost:${serverPort}`,
+  `http://127.0.0.1:${serverPort}`,
+]
+const corsOrigins = splitEnvList(process.env.CORS_ORIGINS, defaultOrigins)
+const allowAnyOrigin = corsOrigins.includes('*')
+
 // Middleware
 app.use('*', cors({
-  origin: ['http://localhost:3013', 'http://localhost:5679'],
+  origin: (origin) => {
+    if (!origin) return origin
+    if (allowAnyOrigin || corsOrigins.includes(origin)) return origin
+    return ''
+  },
   credentials: true,
 }))
+app.use('*', async (c, next) => {
+  c.header('X-Content-Type-Options', 'nosniff')
+  c.header('X-Frame-Options', 'SAMEORIGIN')
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  await next()
+})
 app.use('*', requestLogger)
 app.use('*', errorHandler)
 
@@ -42,17 +76,22 @@ app.get('/api/v1/health', (c) => c.json({ status: 'ok', timestamp: new Date().to
 
 // API routes
 const api = new Hono()
+api.route('/auth', auth)
+api.use('*', requireAuth)
+api.route('/assistant', assistant)
 api.route('/dramas', dramas)
 api.route('/episodes', episodes)
 api.route('/storyboards', storyboards)
 api.route('/scenes', scenes)
 api.route('/characters', characters)
 api.route('/images', images)
+api.route('/events', events)
 api.route('/videos', videos)
 api.route('/upload', upload)
 api.route('/ai-configs', aiConfigs)
 api.route('/ai-providers', aiProviders)
 api.route('/agent-configs', agentConfigs)
+api.route('/agent-presets', agentPresets)
 api.route('/agent', agent)
 api.route('/compose', compose)
 api.route('/merge', merge)
@@ -67,6 +106,7 @@ app.route('/webhooks', webhooks)
 
 // Serve static files (storage)
 app.use('/static/*', serveStatic({ root: path.join(projectRoot, 'data') }))
+app.use('/project/*', serveStatic({ root: projectRoot }))
 
 // Serve frontend (production build)
 const distPath = path.join(projectRoot, 'frontend', 'dist')
@@ -75,4 +115,6 @@ app.get('*', serveStatic({ root: distPath, path: 'index.html' }))
 
 const port = Number(process.env.PORT || 5679)
 console.log(`🚀 Huobao Drama TS server on http://localhost:${port}`)
-serve({ fetch: app.fetch, port })
+console.log(`Huobao public bind: http://${host}:${port}`)
+console.log(`CORS origins: ${allowAnyOrigin ? '*' : corsOrigins.join(', ')}`)
+serve({ fetch: app.fetch, port, hostname: host })

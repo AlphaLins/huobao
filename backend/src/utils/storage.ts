@@ -9,12 +9,60 @@ import { v4 as uuid } from 'uuid'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = process.env.STORAGE_PATH || path.resolve(__dirname, '../../../data/static')
+const PROJECT_ROOT = process.env.PROJECT_STORAGE_PATH || path.resolve(__dirname, '../../../project')
+
+export interface ProjectStorageContext {
+  dramaId?: number | null
+  dramaTitle?: string | null
+  episodeNumber?: number | null
+  generationId?: number | null
+  kind?: string | null
+  prompt?: string | null
+}
+
+function safeSegment(value: string) {
+  return String(value || 'untitled')
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80) || 'untitled'
+}
+
+function projectSlug(context?: ProjectStorageContext) {
+  const title = context?.dramaTitle ? safeSegment(context.dramaTitle) : ''
+  const id = context?.dramaId ? `drama_${context.dramaId}` : 'drama_unknown'
+  return title ? `${id}_${title}` : id
+}
+
+function projectSubDir(subDir: string, context?: ProjectStorageContext) {
+  const parts = [PROJECT_ROOT, projectSlug(context)]
+  if (context?.episodeNumber) parts.push(`episode_${String(context.episodeNumber).padStart(2, '0')}`)
+  parts.push(subDir)
+  return path.join(...parts)
+}
+
+function projectRelativePath(filePath: string) {
+  return `project/${path.relative(PROJECT_ROOT, filePath).replace(/\\/g, '/')}`
+}
+
+function writePromptSidecar(context: ProjectStorageContext | undefined, subDir: string, filenameBase: string) {
+  const prompt = context?.prompt?.trim()
+  if (!prompt) return null
+  const dir = projectSubDir('prompts', context)
+  fs.mkdirSync(dir, { recursive: true })
+  const kind = safeSegment(context?.kind || subDir)
+  const filename = `${kind}-${context?.generationId || filenameBase}.txt`
+  const filePath = path.join(dir, filename)
+  fs.writeFileSync(filePath, prompt, 'utf8')
+  return projectRelativePath(filePath)
+}
 
 /**
  * 下载远程文件到本地存储
  */
-export async function downloadFile(url: string, subDir: string): Promise<string> {
-  const dir = path.join(STORAGE_ROOT, subDir)
+export async function downloadFile(url: string, subDir: string, context?: ProjectStorageContext): Promise<string> {
+  const dir = context ? projectSubDir(subDir, context) : path.join(STORAGE_ROOT, subDir)
   fs.mkdirSync(dir, { recursive: true })
 
   const ext = getExtFromUrl(url)
@@ -26,9 +74,10 @@ export async function downloadFile(url: string, subDir: string): Promise<string>
 
   const buffer = Buffer.from(await resp.arrayBuffer())
   fs.writeFileSync(filePath, buffer)
+  writePromptSidecar(context, subDir, path.basename(filename, ext))
 
   // 返回相对路径（供 API 返回给前端）
-  return `static/${subDir}/${filename}`
+  return context ? projectRelativePath(filePath) : `static/${subDir}/${filename}`
 }
 
 /**
@@ -59,6 +108,12 @@ function getExtFromUrl(url: string): string {
  * 获取本地文件的绝对路径
  */
 export function getAbsolutePath(relativePath: string): string {
+  if (path.isAbsolute(relativePath)) {
+    return relativePath
+  }
+  if (relativePath.startsWith('project/')) {
+    return path.join(PROJECT_ROOT, relativePath.slice('project/'.length))
+  }
   if (relativePath.startsWith('static/')) {
     return path.join(STORAGE_ROOT, '..', relativePath)
   }
@@ -69,8 +124,8 @@ export function getAbsolutePath(relativePath: string): string {
  * 保存 Base64 编码的图片数据到本地存储
  * 用于 Gemini 等只返回 base64 数据的厂商
  */
-export async function saveBase64Image(base64Data: string, mimeType: string, subDir: string): Promise<string> {
-  const dir = path.join(STORAGE_ROOT, subDir)
+export async function saveBase64Image(base64Data: string, mimeType: string, subDir: string, context?: ProjectStorageContext): Promise<string> {
+  const dir = context ? projectSubDir(subDir, context) : path.join(STORAGE_ROOT, subDir)
   fs.mkdirSync(dir, { recursive: true })
 
   // 从 mimeType 推断文件扩展名
@@ -80,8 +135,9 @@ export async function saveBase64Image(base64Data: string, mimeType: string, subD
 
   const buffer = Buffer.from(base64Data, 'base64')
   fs.writeFileSync(filePath, buffer)
+  writePromptSidecar(context, subDir, path.basename(filename, ext))
 
-  return `static/${subDir}/${filename}`
+  return context ? projectRelativePath(filePath) : `static/${subDir}/${filename}`
 }
 
 export function readImageAsDataUrl(relativePath: string): string {

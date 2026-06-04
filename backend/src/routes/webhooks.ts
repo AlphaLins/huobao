@@ -9,6 +9,7 @@ import { success, badRequest } from '../utils/response.js'
 import { downloadFile } from '../utils/storage.js'
 import { ViduVideoAdapter } from '../services/adapters/vidu-video'
 import { logTaskError, logTaskProgress, logTaskSuccess, logTaskWarn } from '../utils/task-logger.js'
+import { emitTaskEvent } from '../utils/events.js'
 
 const app = new Hono()
 
@@ -44,7 +45,23 @@ app.post('/vidu', async (c) => {
 
   if (state === 'success' && video_url) {
     try {
-      const localPath = await downloadFile(video_url, 'videos')
+      const [drama] = record.dramaId ? db.select().from(schema.dramas).where(eq(schema.dramas.id, record.dramaId)).all() : []
+      let episodeNumber: number | undefined
+      if (record.storyboardId) {
+        const [storyboard] = db.select().from(schema.storyboards).where(eq(schema.storyboards.id, record.storyboardId)).all()
+        if (storyboard?.episodeId) {
+          const [episode] = db.select().from(schema.episodes).where(eq(schema.episodes.id, storyboard.episodeId)).all()
+          episodeNumber = episode?.episodeNumber || undefined
+        }
+      }
+      const localPath = await downloadFile(video_url, 'videos', {
+        dramaId: record.dramaId,
+        dramaTitle: drama?.title,
+        episodeNumber,
+        generationId: record.id,
+        kind: 'video',
+        prompt: record.prompt,
+      })
       db.update(schema.videoGenerations)
         .set({
           videoUrl: video_url,
@@ -69,6 +86,15 @@ app.post('/vidu', async (c) => {
         storyboardId: record.storyboardId,
         localPath,
       })
+      emitTaskEvent({
+        type: 'video',
+        status: 'completed',
+        id: record.id,
+        dramaId: record.dramaId,
+        storyboardId: record.storyboardId,
+        localPath,
+        videoUrl: localPath,
+      })
       return success(c, { message: 'Video updated successfully' })
     } catch (err: any) {
       logTaskError('Webhook', 'vidu-download-failed', { taskId: task_id, generationId: record.id, error: err.message })
@@ -76,6 +102,14 @@ app.post('/vidu', async (c) => {
         .set({ status: 'failed', errorMsg: `Webhook download failed: ${err.message}` })
         .where(eq(schema.videoGenerations.id, record.id))
         .run()
+      emitTaskEvent({
+        type: 'video',
+        status: 'failed',
+        id: record.id,
+        dramaId: record.dramaId,
+        storyboardId: record.storyboardId,
+        errorMsg: `Webhook download failed: ${err.message}`,
+      })
       return badRequest(c, err.message)
     }
   }
@@ -89,6 +123,14 @@ app.post('/vidu', async (c) => {
       })
       .where(eq(schema.videoGenerations.id, record.id))
       .run()
+    emitTaskEvent({
+      type: 'video',
+      status: 'failed',
+      id: record.id,
+      dramaId: record.dramaId,
+      storyboardId: record.storyboardId,
+      errorMsg: error || 'Vidu generation failed',
+    })
     return success(c, { message: 'Error recorded' })
   }
 

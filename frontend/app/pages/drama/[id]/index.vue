@@ -26,12 +26,48 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-primary" @click="openAddEpisode">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        添加集
-      </button>
+      <div class="head-right">
+        <button class="btn btn-ghost" @click="showStyleEdit = !showStyleEdit">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          编辑风格
+        </button>
+        <button class="btn btn-primary" @click="openAddEpisode">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          添加集
+        </button>
+      </div>
+    </div>
+
+    <!-- Style Edit Panel -->
+    <div v-if="showStyleEdit" class="style-edit-panel card">
+      <div class="style-edit-header">
+        <span class="style-edit-title">画面风格提示词</span>
+        <button class="back-btn" @click="showStyleEdit = false">收起</button>
+      </div>
+      <textarea v-model="editStylePrompt" class="input" rows="3" placeholder="描述画面风格，例如：写实摄影风格, 真实光影, 电影质感..." />
+      <span class="field-hint">此提示词将全局应用到所有图片和视频生成</span>
+      <div class="style-edit-actions">
+        <button class="btn" @click="showStyleEdit = false">取消</button>
+        <button class="btn btn-primary" :disabled="savingStyle" @click="saveStylePrompt">保存</button>
+      </div>
+    </div>
+
+    <div class="style-edit-panel card">
+      <div class="style-edit-header">
+        <span class="style-edit-title">Agent 预设</span>
+        <span class="field-hint">当前项目的 AI 改写、提取、分镜、配音和图片/视频提示词都会使用此预设</span>
+      </div>
+      <div class="preset-project-row">
+        <BaseSelect v-model="selectedAgentPresetId" :options="agentPresetOptions" placeholder="选择 Agent 预设" searchable />
+        <button class="btn btn-primary" :disabled="savingAgentPreset || !selectedAgentPresetId" @click="saveAgentPreset">
+          {{ savingAgentPreset ? '保存中...' : '保存预设' }}
+        </button>
+      </div>
     </div>
 
     <!-- Episode List -->
@@ -122,8 +158,15 @@
             <div class="config-grid">
               <label class="config-card">
                 <span class="config-card-kicker">IMAGE</span>
-                <span class="field-label">图片配置</span>
+                <span class="field-label">素材图片配置</span>
+                <span class="field-hint">角色形象 · 场景背景</span>
                 <BaseSelect v-model="newEpisodeImageConfigId" :options="imageConfigOptions" placeholder="选择图片服务" searchable />
+              </label>
+              <label class="config-card">
+                <span class="config-card-kicker">STORYBOARD</span>
+                <span class="field-label">分镜图片配置</span>
+                <span class="field-hint">首帧 · 尾帧 · 宫格图</span>
+                <BaseSelect v-model="newEpisodeStoryboardImageConfigId" :options="imageConfigOptions" placeholder="同素材配置" searchable />
               </label>
               <label class="config-card">
                 <span class="config-card-kicker">VIDEO</span>
@@ -151,7 +194,7 @@
 
 <script setup>
 import { toast } from 'vue-sonner'
-import { aiConfigAPI, dramaAPI, episodeAPI } from '~/composables/useApi'
+import { aiConfigAPI, agentPresetAPI, dramaAPI, episodeAPI } from '~/composables/useApi'
 
 const route = useRoute()
 const drama = ref(null)
@@ -163,8 +206,15 @@ const imageConfigs = ref([])
 const videoConfigs = ref([])
 const audioConfigs = ref([])
 const newEpisodeImageConfigId = ref(null)
+const newEpisodeStoryboardImageConfigId = ref(null)
 const newEpisodeVideoConfigId = ref(null)
 const newEpisodeAudioConfigId = ref(null)
+const showStyleEdit = ref(false)
+const editStylePrompt = ref('')
+const savingStyle = ref(false)
+const agentPresets = ref([])
+const selectedAgentPresetId = ref(null)
+const savingAgentPreset = ref(false)
 
 function hasScript(ep) { return !!(ep.script_content || ep.scriptContent) }
 
@@ -178,11 +228,28 @@ function configLabel(config) {
 const imageConfigOptions = computed(() => imageConfigs.value.map(c => ({ label: configLabel(c), value: c.id })))
 const videoConfigOptions = computed(() => videoConfigs.value.map(c => ({ label: configLabel(c), value: c.id })))
 const audioConfigOptions = computed(() => audioConfigs.value.map(c => ({ label: configLabel(c), value: c.id })))
+const agentPresetOptions = computed(() => agentPresets.value.map(p => ({
+  label: `${p.name}${p.is_default ? ' · 默认' : ''}`,
+  value: p.id,
+})))
 const canCreateEpisode = computed(() => !!(newEpisodeImageConfigId.value && newEpisodeVideoConfigId.value && newEpisodeAudioConfigId.value))
 
 async function load() {
   try {
     drama.value = await dramaAPI.get(dramaId)
+    editStylePrompt.value = drama.value?.style_prompt || drama.value?.stylePrompt || ''
+    selectedAgentPresetId.value = drama.value?.agent_preset_id || drama.value?.agentPresetId || selectedAgentPresetId.value
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function loadAgentPresets() {
+  try {
+    agentPresets.value = await agentPresetAPI.list()
+    if (!selectedAgentPresetId.value) {
+      selectedAgentPresetId.value = (agentPresets.value.find(p => p.is_default) || agentPresets.value[0])?.id || null
+    }
   } catch (e) {
     toast.error(e.message)
   }
@@ -199,6 +266,7 @@ async function loadConfigs() {
     videoConfigs.value = vids || []
     audioConfigs.value = auds || []
     if (!newEpisodeImageConfigId.value && imageConfigs.value.length) newEpisodeImageConfigId.value = imageConfigs.value[0].id
+    if (!newEpisodeStoryboardImageConfigId.value && imageConfigs.value.length) newEpisodeStoryboardImageConfigId.value = imageConfigs.value[0].id
     if (!newEpisodeVideoConfigId.value && videoConfigs.value.length) newEpisodeVideoConfigId.value = videoConfigs.value[0].id
     if (!newEpisodeAudioConfigId.value && audioConfigs.value.length) newEpisodeAudioConfigId.value = audioConfigs.value[0].id
   } catch (e) {
@@ -218,6 +286,7 @@ async function addEpisode() {
       drama_id: dramaId,
       title: newEpisodeTitle.value || undefined,
       image_config_id: newEpisodeImageConfigId.value,
+      storyboard_image_config_id: newEpisodeStoryboardImageConfigId.value,
       video_config_id: newEpisodeVideoConfigId.value,
       audio_config_id: newEpisodeAudioConfigId.value,
     })
@@ -231,7 +300,34 @@ async function addEpisode() {
   }
 }
 
-onMounted(() => { load(); loadConfigs() })
+async function saveStylePrompt() {
+  try {
+    savingStyle.value = true
+    await dramaAPI.update(dramaId, { style_prompt: editStylePrompt.value })
+    toast.success('风格提示词已保存')
+    showStyleEdit.value = false
+    load()
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    savingStyle.value = false
+  }
+}
+
+async function saveAgentPreset() {
+  try {
+    savingAgentPreset.value = true
+    await dramaAPI.update(dramaId, { agent_preset_id: selectedAgentPresetId.value })
+    toast.success('Agent 预设已保存')
+    load()
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    savingAgentPreset.value = false
+  }
+}
+
+onMounted(() => { load(); loadConfigs(); loadAgentPresets() })
 </script>
 
 <style scoped>
@@ -251,6 +347,7 @@ onMounted(() => { load(); loadConfigs() })
 }
 .head-left { display: flex; align-items: flex-start; gap: 12px; }
 .head-info { display: flex; flex-direction: column; gap: 8px; }
+.head-right { display: flex; align-items: center; gap: 10px; }
 
 .back-btn {
   display: flex; align-items: center; gap: 6px;
@@ -441,7 +538,7 @@ onMounted(() => { load(); loadConfigs() })
 .dialog-section-copy { font-size: 12px; color: var(--text-3); }
 .config-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 .config-card {
@@ -476,6 +573,45 @@ onMounted(() => { load(); loadConfigs() })
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--text-1); }
 .field-hint { font-size: 12px; color: var(--text-3); }
+
+/* Style Edit Panel */
+.style-edit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  max-width: 760px;
+  animation: fadeUp 0.25s var(--ease-out) both;
+}
+.style-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.style-edit-title { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.style-edit-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.preset-project-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Dialog foot */
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 2px;
+}
+.dialog-foot-copy {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
 
 @media (max-width: 860px) {
   .dialog {

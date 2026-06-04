@@ -8,6 +8,7 @@ import { db, schema } from '../../db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
 import { logTaskProgress, logTaskSuccess } from '../../utils/task-logger.js'
+import { getDramaStylePrompt } from '../../utils/style-prompt.js'
 
 function syncStoryboardCharacters(storyboardId: number, characterIds: number[]) {
   db.delete(schema.storyboardCharacters)
@@ -117,6 +118,8 @@ export function createStoryboardTools(episodeId: number, dramaId: number) {
           description: ep.description || '',
         },
         script,
+        style_prompt: getDramaStylePrompt(dramaId),
+        style_prompt_usage: '将 style_prompt 附加到每个 image_prompt 和 video_prompt 的末尾，格式: "{具体画面描述} -- {style_prompt}"。style_prompt 是风格修饰，不要放在开头以免覆盖画面内容指令。',
         characters,
         scenes,
         existing_storyboards: existingStoryboards

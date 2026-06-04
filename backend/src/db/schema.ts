@@ -1,24 +1,74 @@
-/**
+﻿/**
  * Drizzle schema — 精确匹配现有 SQLite 数据库列名
  * 从 PRAGMA table_info() 逆向生成
  */
 import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core'
 
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  displayName: text('display_name'),
+  role: text('role').notNull().default('user'),
+  status: text('status').notNull().default('active'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const sessions = sqliteTable('sessions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
 export const dramas = sqliteTable('dramas', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id'),
   title: text('title').notNull(),
   description: text('description'),
   genre: text('genre'),
   style: text('style').default('realistic'),
+  stylePrompt: text('style_prompt'),
+  agentPresetId: integer('agent_preset_id'),
   totalEpisodes: integer('total_episodes').default(1),
   totalDuration: integer('total_duration').default(0),
   status: text('status').notNull().default('draft'),
   thumbnail: text('thumbnail'),
   tags: text('tags'),
   metadata: text('metadata'),
+  aspectRatio: text('aspect_ratio').default('16:9'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at'),
+})
+
+export const agentPresets = sqliteTable('agent_presets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  description: text('description'),
+  isBuiltin: integer('is_builtin', { mode: 'boolean' }).default(false),
+  isDefault: integer('is_default', { mode: 'boolean' }).default(false),
+  isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+export const agentPresetConfigs = sqliteTable('agent_preset_configs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  presetId: integer('preset_id').notNull(),
+  agentType: text('agent_type').notNull(),
+  name: text('name').notNull(),
+  model: text('model'),
+  systemPrompt: text('system_prompt'),
+  temperature: real('temperature'),
+  maxTokens: integer('max_tokens'),
+  maxIterations: integer('max_iterations'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
 })
 
 export const episodes = sqliteTable('episodes', {
@@ -34,6 +84,7 @@ export const episodes = sqliteTable('episodes', {
   videoUrl: text('video_url'),
   thumbnail: text('thumbnail'),
   imageConfigId: integer('image_config_id'),
+  storyboardImageConfigId: integer('storyboard_image_config_id'),
   videoConfigId: integer('video_config_id'),
   audioConfigId: integer('audio_config_id'),
   createdAt: text('created_at').notNull(),

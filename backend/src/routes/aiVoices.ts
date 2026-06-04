@@ -8,12 +8,17 @@ import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
 import { success, badRequest, now } from '../utils/response.js'
 import { joinProviderUrl } from '../services/adapters/url.js'
+import { getGeminiVoices, isGeminiVoiceProvider } from '../services/adapters/gemini-voices.js'
 
 const app = new Hono()
 
 // GET /ai-voices?provider=minimax
 app.get('/', async (c) => {
   const provider = c.req.query('provider') || 'minimax'
+  if (isGeminiVoiceProvider(provider)) {
+    return success(c, getGeminiVoices(provider))
+  }
+
   const rows = db.select().from(schema.aiVoices)
     .where(eq(schema.aiVoices.provider, provider))
     .all()

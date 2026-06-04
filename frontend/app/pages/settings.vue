@@ -180,6 +180,98 @@
       </div>
 
       <!-- ===== Skills 编辑 ===== -->
+      <div v-else-if="tab === 'presets'" class="skills-layout">
+        <aside class="skills-agent-list">
+          <div class="skills-agent-title">Agent Presets</div>
+          <button
+            v-for="p in agentPresets"
+            :key="p.id"
+            :class="['skills-agent-item', { active: selectedPresetId === p.id }]"
+            @click="selectPreset(p.id)"
+          >
+            <span class="agent-type-badge">{{ p.key === 'documentary' ? '纪' : p.key === 'short_drama' ? '短' : p.key === 'mv' ? 'M' : '通' }}</span>
+            <span class="skills-agent-label">{{ p.name }}</span>
+            <span v-if="p.is_default" class="skill-count-badge">默认</span>
+          </button>
+          <button class="btn btn-primary btn-sm" style="margin:12px" @click="createCustomPreset">
+            <Plus :size="13" /> 新建预设
+          </button>
+        </aside>
+
+        <div class="settings-scroll skills-main">
+          <div v-if="selectedPreset" class="settings-head">
+            <div class="settings-brand">
+              <div class="settings-brand-mark"><span class="settings-brand-fallback">A</span></div>
+              <div class="settings-brand-copy">
+                <div class="settings-brand-kicker">Agent Preset</div>
+                <div class="settings-brand-name">{{ selectedPreset.name }}</div>
+              </div>
+            </div>
+            <h2 class="settings-title">Agent 预设</h2>
+            <p class="settings-desc">一套预设会同时影响剧本改写、角色场景提取、分镜拆解、音色分配和图片/视频提示词风格。</p>
+            <div class="preset-actions">
+              <button class="btn btn-ghost btn-sm" @click="duplicatePreset(selectedPreset)">复制为自定义</button>
+              <button class="btn btn-ghost btn-sm" @click="setDefaultPreset(selectedPreset.id)">设为全局默认</button>
+              <button v-if="!selectedPreset.is_builtin" class="btn btn-ghost btn-sm" @click="deletePreset(selectedPreset)">删除</button>
+              <button class="btn btn-primary btn-sm ml-auto" :disabled="presetSaving" @click="savePreset">
+                <Loader2 v-if="presetSaving" :size="12" class="animate-spin" />
+                保存预设
+              </button>
+            </div>
+          </div>
+
+          <div v-if="selectedPreset" class="agent-list">
+            <section class="card agent-card">
+              <div class="agent-card-body" style="border-top:0">
+                <label class="field">
+                  <span class="field-label">预设名称</span>
+                  <input v-model="presetForm.name" class="input" :disabled="selectedPreset.is_builtin" />
+                </label>
+                <label class="field">
+                  <span class="field-label">说明</span>
+                  <textarea v-model="presetForm.description" class="textarea" rows="2" />
+                </label>
+              </div>
+            </section>
+
+            <div v-for="cfg in presetForm.configs" :key="cfg.agent_type" class="card agent-card">
+              <div class="agent-card-head" @click="togglePresetAgent(cfg.agent_type)">
+                <div class="agent-type-badge">{{ agentDefs.find(a => a.type === cfg.agent_type)?.icon || 'A' }}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;font-size:14px">{{ agentDefs.find(a => a.type === cfg.agent_type)?.label || cfg.agent_type }}</div>
+                  <div class="dim" style="font-size:12px">{{ cfg.agent_type }}</div>
+                </div>
+                <ChevronDown :size="14" :style="{ transform: editingPresetAgent === cfg.agent_type ? 'rotate(180deg)' : '', transition: '0.2s' }" />
+              </div>
+              <div v-if="editingPresetAgent === cfg.agent_type" class="agent-card-body">
+                <label class="field">
+                  <span class="field-label">模型 <span class="dim">(留空使用文本服务默认模型)</span></span>
+                  <BaseSelect v-model="cfg.model" :options="textModelSelectOptions" placeholder="使用 AI 服务默认" searchable />
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span class="field-label">Temperature</span>
+                    <input v-model.number="cfg.temperature" class="input" type="number" min="0" max="2" step="0.1" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Max Tokens</span>
+                    <input v-model.number="cfg.max_tokens" class="input" type="number" min="100" max="32000" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span class="field-label">Max Iterations</span>
+                  <input v-model.number="cfg.max_iterations" class="input" type="number" min="1" max="50" />
+                </label>
+                <label class="field">
+                  <span class="field-label">System Prompt</span>
+                  <textarea v-model="cfg.system_prompt" class="textarea" rows="14" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="tab === 'skills'" class="skills-layout">
         <!-- Agent 左侧列表 -->
         <aside class="skills-agent-list">
@@ -394,7 +486,7 @@
 import { Plus, Pencil, Trash2, FileText, ChevronDown, Check, Loader2, Bot, Cpu, Sparkles } from 'lucide-vue-next'
 import BaseSelect from '~/components/BaseSelect.vue'
 import { toast } from 'vue-sonner'
-import { aiConfigAPI, agentConfigAPI, skillsAPI } from '~/composables/useApi'
+import { aiConfigAPI, agentConfigAPI, agentPresetAPI, skillsAPI } from '~/composables/useApi'
 import brandLogo from '~/assets/huobao-logo.png'
 
 const showBrandImage = ref(true)
@@ -404,6 +496,7 @@ const baseTabs = [
   { id: 'ai', label: 'AI 服务', icon: Cpu },
 ]
 const advancedTabs = [
+  { id: 'presets', label: 'Agent 预设', icon: Sparkles },
   { id: 'agents', label: 'Agent 配置', icon: Bot },
   { id: 'skills', label: 'Skills', icon: FileText },
 ]
@@ -421,7 +514,7 @@ const cfgTestResult = ref(null)
 const cfgForm = reactive({ name: '', provider: '', api_key: '', base_url: '', modelStr: '', service_type: 'text', priority: 0 })
 const huobaoForm = reactive({ apiKey: '' })
 const serviceTypes = [{ type: 'text', label: '文本' }, { type: 'image', label: '图片' }, { type: 'video', label: '视频' }, { type: 'audio', label: '音频' }]
-const providers = ['ali', 'chatfire', 'gemini', 'minimax', 'openai', 'openrouter', 'vidu', 'volcengine']
+const providers = ['ali', 'apimart', 'chatfire', 'gemini', 'minimax', 'openai', 'openrouter', 'vidu', 'volcengine']
 const providerSelectOptions = computed(() => providers.map(p => ({ label: p, value: p })))
 const serviceMeta = {
   text: { label: '文本', desc: '剧本改写、角色场景提取、分镜拆解等 Agent 文本能力' },
@@ -431,21 +524,28 @@ const serviceMeta = {
 }
 const providerPresets = {
   text: {
+    apimart: { label: 'APIMart 文本', baseUrl: 'https://api.apimart.ai', models: ['gpt-5.5'] },
     chatfire: { label: 'ChatFire 推荐', baseUrl: 'https://api.chatfire.site', models: ['gemini-3-pro-preview'] },
     openrouter: { label: 'OpenRouter 推荐', baseUrl: 'https://openrouter.ai/api', models: ['google/gemini-3-flash-preview'] },
-    openai: { label: 'OpenAI 推荐', baseUrl: 'https://api.openai.com', models: ['gpt-4.1-mini'] },
+    openai: { label: 'OpenAI GPT-5.5', baseUrl: 'https://api.openai.com', models: ['gpt-5.5'] },
   },
   image: {
+    apimart: { label: 'APIMart 图片', baseUrl: 'https://api.apimart.ai', models: ['gpt-image-2'] },
     chatfire: { label: 'ChatFire 推荐', baseUrl: 'https://api.chatfire.site', models: ['doubao-seedream-4-5-251128'] },
     gemini: { label: 'Gemini 推荐', baseUrl: 'https://api.chatfire.site', models: ['gemini-3-pro-image-preview'] },
     volcengine: { label: '火山推荐', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedream-4-0-250828'] },
   },
   video: {
+    apimart: { label: 'APIMart 视频', baseUrl: 'https://api.apimart.ai', models: ['sora-2', 'Omni-Flash-Ext', 'veo3.1-fast', 'grok-imagine-1.0-video-apimart'] },
     volcengine: { label: '火宝视频', baseUrl: 'https://api.chatfire.site/volcengine', models: ['doubao-seedance-1-5-pro-251215'] },
     vidu: { label: 'Vidu 推荐', baseUrl: 'https://api.vidu.com', models: ['viduq3-turbo'] },
     ali: { label: '阿里推荐', baseUrl: 'https://dashscope.aliyuncs.com', models: ['wan2.6-i2v-flash'] },
+    sora: { label: 'VipStar Sora2', baseUrl: 'https://vipstar.vip', models: ['sora-2'] },
+    openai_sora: { label: 'VipStar Sora2', baseUrl: 'https://vipstar.vip', models: ['sora-2'] },
   },
   audio: {
+    apimart: { label: 'APIMart 音频', baseUrl: 'https://api.apimart.ai', models: ['gpt-4o-mini-tts'] },
+    gemini: { label: 'Gemini TTS', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3.1-flash-tts-preview'] },
     minimax: { label: '火宝音频', baseUrl: 'https://api.chatfire.site/minimax', models: ['speech-2.8-hd'] },
   },
 }
@@ -464,6 +564,9 @@ const endpointPrefixes = {
   volcengine: '/api/v3',
   ali: '/api/v1',
   vidu: '/ent/v2',
+  sora: '/v1',
+  openai_sora: '/v1',
+  apimart: '/v1',
 }
 
 const endpointHint = computed(() => {
@@ -528,12 +631,13 @@ async function testCfgPayload(payload) {
   }
 }
 async function testDraftCfg() {
+  const models = cfgForm.modelStr.split(',').map(s => s.trim()).filter(Boolean)
   await testCfgPayload({
     service_type: cfgForm.service_type,
-    provider: cfgForm.provider,
+    provider: resolveProviderForModels(cfgForm.service_type, cfgForm.provider, models),
     api_key: cfgForm.api_key,
     base_url: cfgForm.base_url,
-    model: cfgForm.modelStr.split(',').map(s => s.trim()).filter(Boolean),
+    model: models,
   })
 }
 async function testExistingCfg(c) {
@@ -549,11 +653,27 @@ async function testExistingCfg(c) {
 async function saveCfg() {
   if (!cfgForm.provider) { toast.warning('选择服务商'); return }
   const models = cfgForm.modelStr.split(',').map(s => s.trim()).filter(Boolean)
+  const provider = resolveProviderForModels(cfgForm.service_type, cfgForm.provider, models)
   try {
-    if (cfgEditId.value) await aiConfigAPI.update(cfgEditId.value, { name: cfgForm.name, provider: cfgForm.provider, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
-    else await aiConfigAPI.create({ service_type: cfgForm.service_type, provider: cfgForm.provider, name: cfgForm.name || `${cfgForm.provider}-${cfgForm.service_type}`, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
+    if (cfgEditId.value) await aiConfigAPI.update(cfgEditId.value, { name: cfgForm.name, provider, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
+    else await aiConfigAPI.create({ service_type: cfgForm.service_type, provider, name: cfgForm.name || `${provider}-${cfgForm.service_type}`, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
     cfgDialog.value = false; toast.success('已保存'); loadCfgs()
   } catch (e) { toast.error(e.message) }
+}
+
+function resolveProviderForModels(serviceType, provider, models) {
+  if (provider === 'apimart') return 'apimart'
+  const first = String(models?.[0] || '').toLowerCase()
+  if (serviceType === 'audio') {
+    if (first.startsWith('gemini') || first.includes('gemini-') || provider === 'geminitts') return 'gemini'
+    return provider
+  }
+  if (serviceType !== 'video') return provider
+  if (first.startsWith('sora')) return 'sora'
+  if (first.startsWith('omni') || first.includes('omni-video')) return 'sora'
+  if (first.startsWith('grok') || first.includes('grok-video')) return 'grok'
+  if (first.startsWith('veo') || first.startsWith('veo_')) return 'veo'
+  return provider
 }
 async function applyHuobaoPreset() {
   if (!huobaoForm.apiKey) {
@@ -745,6 +865,134 @@ async function saveAgentCfg(type) {
   }
 }
 
+// ===== Agent Presets =====
+const agentPresets = ref([])
+const selectedPresetId = ref(null)
+const editingPresetAgent = ref('script_rewriter')
+const presetSaving = ref(false)
+const presetForm = reactive({ name: '', description: '', configs: [] })
+
+const selectedPreset = computed(() => agentPresets.value.find(p => p.id === selectedPresetId.value) || null)
+
+function normalizePresetConfig(config) {
+  return {
+    agent_type: config.agent_type || config.agentType,
+    name: config.name || '',
+    model: config.model || '',
+    system_prompt: config.system_prompt || config.systemPrompt || '',
+    temperature: config.temperature ?? 0.7,
+    max_tokens: config.max_tokens ?? config.maxTokens ?? 4096,
+    max_iterations: config.max_iterations ?? config.maxIterations ?? 10,
+  }
+}
+
+function fillPresetForm(preset) {
+  presetForm.name = preset?.name || ''
+  presetForm.description = preset?.description || ''
+  const configs = (preset?.configs || []).map(normalizePresetConfig)
+  presetForm.configs = agentDefs.map(agent => {
+    const found = configs.find(c => c.agent_type === agent.type)
+    return found || {
+      agent_type: agent.type,
+      name: agent.label,
+      model: '',
+      system_prompt: '',
+      temperature: 0.7,
+      max_tokens: 4096,
+      max_iterations: 10,
+    }
+  })
+}
+
+async function loadPresets() {
+  try {
+    agentPresets.value = await agentPresetAPI.list()
+    if (!selectedPresetId.value && agentPresets.value.length) {
+      selectedPresetId.value = (agentPresets.value.find(p => p.is_default) || agentPresets.value[0]).id
+    }
+    fillPresetForm(selectedPreset.value)
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+function selectPreset(id) {
+  selectedPresetId.value = id
+  editingPresetAgent.value = 'script_rewriter'
+  fillPresetForm(selectedPreset.value)
+}
+
+function togglePresetAgent(type) {
+  editingPresetAgent.value = editingPresetAgent.value === type ? null : type
+}
+
+async function createCustomPreset() {
+  try {
+    const created = await agentPresetAPI.create({ name: '自定义预设', description: '根据业务需求自定义的 Agent 预设' })
+    await loadPresets()
+    selectPreset(created.id)
+    toast.success('已创建自定义预设')
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function duplicatePreset(preset) {
+  try {
+    const created = await agentPresetAPI.duplicate(preset.id, { name: `${preset.name} 自定义` })
+    await loadPresets()
+    selectPreset(created.id)
+    toast.success('已复制为自定义预设')
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function setDefaultPreset(id) {
+  try {
+    await agentPresetAPI.setDefault(id)
+    await loadPresets()
+    toast.success('已设为全局默认预设')
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function deletePreset(preset) {
+  if (!preset || preset.is_builtin) return
+  if (!confirm(`确定删除预设「${preset.name}」？`)) return
+  try {
+    await agentPresetAPI.del(preset.id)
+    selectedPresetId.value = null
+    await loadPresets()
+    toast.success('已删除预设')
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function savePreset() {
+  if (!selectedPreset.value) return
+  if (selectedPreset.value.is_builtin) {
+    toast.info('内置预设用于保留原始方案，请先复制为自定义预设后再编辑')
+    return
+  }
+  presetSaving.value = true
+  try {
+    await agentPresetAPI.update(selectedPreset.value.id, {
+      name: presetForm.name,
+      description: presetForm.description,
+      configs: presetForm.configs,
+    })
+    await loadPresets()
+    toast.success('预设已保存')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    presetSaving.value = false
+  }
+}
+
 // ===== Skills =====
 const selectedAgent = ref('script_rewriter')
 const allSkills = ref([])   // { id, name, description }[]
@@ -835,7 +1083,7 @@ async function saveSkill(id) {
   }
 }
 
-onMounted(() => { loadCfgs(); loadAgents(); loadAllSkills() })
+onMounted(() => { loadCfgs(); loadAgents(); loadPresets(); loadAllSkills() })
 </script>
 
 <style scoped>
@@ -1044,6 +1292,7 @@ onMounted(() => { loadCfgs(); loadAgents(); loadAllSkills() })
 .agent-type-badge { width: 36px; height: 36px; border-radius: var(--radius); background: var(--accent-bg); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
 .agent-card-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
 .agent-card-foot { display: flex; align-items: center; gap: 8px; padding-top: 8px; }
+.preset-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 
 /* Skills 布局 */
 .skills-layout { display: flex; height: 100%; overflow: hidden; }

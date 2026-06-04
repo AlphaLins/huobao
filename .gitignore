@@ -17,6 +17,9 @@ dist/
 
 # Logs
 *.log
+logs/
+backend-dev*.log
+frontend-dev*.log
 
 # OS
 .DS_Store
@@ -33,6 +36,12 @@ data/public.sql
 data/*.bak*
 data/static/
 data/storage/
+data/cache/
+
+# Generated media and local exports
+project/
+video/
+static/
 
 # Config
 configs/config.yaml
@@ -43,3 +52,9 @@ temp/
 .superpowers/
 /CLAUDE.md
 /AGENTS.md
+repomix-output.*
+debugging.md
+implementation_plan.md
+chk_db.js
+extract_docx.py
+read_docx.py

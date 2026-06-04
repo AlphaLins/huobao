@@ -1,9 +1,11 @@
-import Database from 'better-sqlite3'
+﻿import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema.js'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
+import { BUILTIN_AGENT_PRESETS } from '../agents/preset-data.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DB_PATH = process.env.DB_PATH || path.resolve(__dirname, '../../../data/huobao_drama.db')
@@ -15,8 +17,32 @@ sqlite.pragma('journal_mode = WAL')
 sqlite.pragma('busy_timeout = 30000')
 
 sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessions_token_hash
+    ON sessions (token_hash);
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_id
+    ON sessions (user_id);
+
   CREATE TABLE IF NOT EXISTS dramas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     description TEXT,
     genre TEXT,
@@ -214,6 +240,35 @@ sqlite.exec(`
     deleted_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS agent_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    is_builtin INTEGER DEFAULT 0,
+    is_default INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_preset_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    preset_id INTEGER NOT NULL,
+    agent_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    model TEXT,
+    system_prompt TEXT,
+    temperature REAL,
+    max_tokens INTEGER,
+    max_iterations INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_preset_configs_unique
+    ON agent_preset_configs (preset_id, agent_type);
+
   CREATE TABLE IF NOT EXISTS image_generations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     storyboard_id INTEGER,
@@ -356,9 +411,124 @@ function ensureColumn(table: string, column: string, definition: string) {
 }
 
 ensureColumn('episodes', 'image_config_id', 'INTEGER')
+ensureColumn('episodes', 'storyboard_image_config_id', 'INTEGER')
 ensureColumn('episodes', 'video_config_id', 'INTEGER')
 ensureColumn('episodes', 'audio_config_id', 'INTEGER')
+ensureColumn('dramas', 'style_prompt', 'TEXT')
+ensureColumn('dramas', 'user_id', 'INTEGER')
+ensureColumn('dramas', 'agent_preset_id', 'INTEGER')
+
+function seedBuiltinAgentPresets() {
+  const ts = new Date().toISOString()
+  const insertPreset = sqlite.prepare(`
+    INSERT INTO agent_presets (key, name, description, is_builtin, is_default, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, 1, ?, 1, ?, ?)
+  `)
+  const updatePreset = sqlite.prepare(`
+    UPDATE agent_presets
+    SET name = ?, description = ?, is_builtin = 1, is_active = 1, updated_at = ?
+    WHERE id = ?
+  `)
+  const findPreset = sqlite.prepare('SELECT id FROM agent_presets WHERE key = ? LIMIT 1')
+  const upsertConfig = sqlite.prepare(`
+    INSERT INTO agent_preset_configs (
+      preset_id, agent_type, name, model, system_prompt, temperature, max_tokens, max_iterations, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(preset_id, agent_type) DO UPDATE SET
+      name = excluded.name,
+      model = CASE WHEN agent_preset_configs.model IS NULL OR agent_preset_configs.model = '' THEN excluded.model ELSE agent_preset_configs.model END,
+      system_prompt = excluded.system_prompt,
+      temperature = excluded.temperature,
+      max_tokens = excluded.max_tokens,
+      max_iterations = excluded.max_iterations,
+      updated_at = excluded.updated_at
+  `)
+
+  const tx = sqlite.transaction(() => {
+    for (const preset of BUILTIN_AGENT_PRESETS) {
+      let row = findPreset.get(preset.key) as { id: number } | undefined
+      if (row) {
+        updatePreset.run(preset.name, preset.description, ts, row.id)
+      } else {
+        const result = insertPreset.run(preset.key, preset.name, preset.description, preset.isDefault ? 1 : 0, ts, ts)
+        row = { id: Number(result.lastInsertRowid) }
+      }
+
+      for (const config of preset.configs) {
+        upsertConfig.run(
+          row.id,
+          config.agentType,
+          config.name,
+          config.model,
+          config.systemPrompt,
+          config.temperature,
+          config.maxTokens,
+          config.maxIterations,
+          ts,
+          ts,
+        )
+      }
+    }
+
+    const defaultRow = sqlite.prepare(`
+      SELECT id FROM agent_presets
+      WHERE is_default = 1 AND deleted_at IS NULL
+      ORDER BY id
+      LIMIT 1
+    `).get() as { id: number } | undefined
+    if (!defaultRow) {
+      sqlite.prepare("UPDATE agent_presets SET is_default = 1 WHERE key = 'original'").run()
+    }
+  })
+
+  tx()
+}
+
+seedBuiltinAgentPresets()
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString('hex')
+  const derived = scryptSync(password, salt, 64).toString('hex')
+  return `scrypt:${salt}:${derived}`
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const parts = stored.split(':')
+  if (parts.length !== 3 || parts[0] !== 'scrypt') return false
+  const [, salt, hash] = parts
+  const expected = Buffer.from(hash, 'hex')
+  const actual = scryptSync(password, salt, expected.length)
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
+}
+
+const ts = new Date().toISOString()
+const adminUsername = process.env.ADMIN_USERNAME || 'admin'
+const adminPassword = process.env.ADMIN_PASSWORD || 'admin123'
+const adminDisplayName = process.env.ADMIN_DISPLAY_NAME || 'Admin'
+
+let admin = sqlite.prepare('SELECT * FROM users WHERE role = ? ORDER BY id LIMIT 1').get('admin') as
+  | { id: number; username: string; password_hash: string }
+  | undefined
+
+if (!admin) {
+  const passwordHash = hashPassword(adminPassword)
+  const info = sqlite.prepare(`
+    INSERT INTO users (username, password_hash, display_name, role, status, created_at, updated_at)
+    VALUES (?, ?, ?, 'admin', 'active', ?, ?)
+  `).run(adminUsername, passwordHash, adminDisplayName, ts, ts)
+  admin = {
+    id: Number(info.lastInsertRowid),
+    username: adminUsername,
+    password_hash: passwordHash,
+  }
+  console.warn(`Created default admin account: ${adminUsername}`)
+}
+
+sqlite.prepare('UPDATE dramas SET user_id = ? WHERE user_id IS NULL').run(admin.id)
 
 export const db = drizzle(sqlite, { schema })
 export { schema }
 export type DB = typeof db
+export const rawSqlite: any = sqlite
+export const passwordUtils = { hashPassword, verifyPassword }

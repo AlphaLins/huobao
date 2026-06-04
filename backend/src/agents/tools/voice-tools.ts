@@ -7,6 +7,7 @@ import { db, schema } from '../../db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
 import { logTaskProgress, logTaskSuccess } from '../../utils/task-logger.js'
+import { getGeminiVoices, isGeminiVoiceProvider } from '../../services/adapters/gemini-voices.js'
 
 export function createVoiceTools(episodeId: number, dramaId: number) {
   function getEpisodeAudioProvider() {
@@ -45,7 +46,14 @@ export function createVoiceTools(episodeId: number, dramaId: number) {
     execute: async () => {
       const provider = getEpisodeAudioProvider() || 'minimax'
       const rows = db.select().from(schema.aiVoices).where(eq(schema.aiVoices.provider, provider)).all()
-      const voices = rows.length ? rows.map(v => {
+      const staticGeminiRows = isGeminiVoiceProvider(provider) ? getGeminiVoices(provider).map(v => ({
+        voiceId: v.voice_id,
+        voiceName: v.voice_name,
+        description: JSON.stringify(v.description),
+        language: v.language,
+      })) : []
+      const sourceRows = rows.length ? rows : staticGeminiRows
+      const voices = sourceRows.length ? sourceRows.map(v => {
         const desc = v.description ? JSON.parse(v.description) : []
         return {
           id: v.voiceId,

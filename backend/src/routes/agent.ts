@@ -2,7 +2,7 @@
  * Agent 聊天路由 — 非流式版本
  */
 import { Hono } from 'hono'
-import { createAgent, validAgentTypes } from '../agents/index.js'
+import { createAgent, getAgentGenerateOptions, validAgentTypes } from '../agents/index.js'
 import { success, badRequest } from '../utils/response.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
@@ -55,7 +55,7 @@ app.post('/:type/chat', async (c) => {
   try {
     const result = await agent.generate(
       [{ role: 'user', content: message }],
-      { maxSteps: 20 },
+      getAgentGenerateOptions(agentType, drama_id),
     )
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)

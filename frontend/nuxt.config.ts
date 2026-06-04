@@ -20,6 +20,7 @@ export default defineNuxtConfig({
       proxy: {
         '/api': { target: 'http://localhost:5679', changeOrigin: true },
         '/static': { target: 'http://localhost:5679', changeOrigin: true },
+        '/project': { target: 'http://localhost:5679', changeOrigin: true },
       },
     },
   },

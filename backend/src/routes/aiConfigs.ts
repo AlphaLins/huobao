@@ -1,10 +1,11 @@
-import { Hono } from 'hono'
+﻿import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
 import { success, notFound, created, badRequest, now } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { joinProviderUrl } from '../services/adapters/url.js'
 import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../utils/task-logger.js'
+import { requireAdmin } from '../middleware/auth.js'
 
 const app = new Hono()
 
@@ -59,7 +60,7 @@ function buildProbe(serviceType: string, provider: string, baseUrl: string, mode
     return { method: 'POST', url: url.toString(), headers: geminiHeaders(apiKey, true), body: {} }
   }
 
-  if (p === 'openai' || p === 'openrouter' || p === 'chatfire') {
+  if (p === 'openai' || p === 'openrouter' || p === 'chatfire' || p === 'apimart') {
     return {
       method: 'GET',
       url: joinProviderUrl(baseUrl, '/v1', '/models'),
@@ -114,6 +115,15 @@ function buildProbe(serviceType: string, provider: string, baseUrl: string, mode
     }
   }
 
+  if ((p === 'sora' || p === 'openai_sora') && serviceType === 'video') {
+    return {
+      method: 'POST',
+      url: joinProviderUrl(baseUrl, '/v1', '/video/create'),
+      headers: bearerHeaders(apiKey, true),
+      body: {},
+    }
+  }
+
   return {
     method: 'GET',
     url: joinProviderUrl(baseUrl, '', m ? `/${m}` : '/'),
@@ -130,13 +140,14 @@ app.get('/', async (c) => {
 
   const parsed = rows.map(r => ({
     ...toSnakeCase(r),
+    api_key: r.apiKey ? '***' : '',
     model: r.model ? JSON.parse(r.model) : [],
   }))
   return success(c, parsed)
 })
 
 // POST /ai-configs
-app.post('/', async (c) => {
+app.post('/', requireAdmin, async (c) => {
   const body = await c.req.json()
   const ts = now()
 
@@ -168,7 +179,7 @@ app.post('/', async (c) => {
 })
 
 // POST /ai-configs/huobao-preset
-app.post('/huobao-preset', async (c) => {
+app.post('/huobao-preset', requireAdmin, async (c) => {
   const body = await c.req.json()
   const apiKey = String(body.api_key || '').trim()
   if (!apiKey) return badRequest(c, 'api_key is required')
@@ -248,7 +259,7 @@ app.post('/huobao-preset', async (c) => {
 })
 
 // POST /ai-configs/test
-app.post('/test', async (c) => {
+app.post('/test', requireAdmin, async (c) => {
   const body = await c.req.json()
   if (!body.service_type || !body.provider || !body.base_url) {
     return badRequest(c, 'service_type, provider and base_url are required')
@@ -323,12 +334,13 @@ app.get('/:id', async (c) => {
   if (!row) return notFound(c)
   return success(c, {
     ...toSnakeCase(row),
+    api_key: row.apiKey ? '***' : '',
     model: row.model ? JSON.parse(row.model) : [],
   })
 })
 
 // PUT /ai-configs/:id
-app.put('/:id', async (c) => {
+app.put('/:id', requireAdmin, async (c) => {
   const id = Number(c.req.param('id'))
   const body = await c.req.json()
   const updates: Record<string, any> = { updatedAt: now() }
@@ -336,17 +348,30 @@ app.put('/:id', async (c) => {
   if ('provider' in body) updates.provider = body.provider
   if ('name' in body) updates.name = body.name
   if ('base_url' in body) updates.baseUrl = body.base_url
-  if ('api_key' in body) updates.apiKey = body.api_key
+  if ('api_key' in body && body.api_key !== '***') updates.apiKey = body.api_key
   if ('model' in body) updates.model = JSON.stringify(body.model)
   if ('priority' in body) updates.priority = body.priority
   if ('is_active' in body) updates.isActive = body.is_active
+
+  // Handle is_default: set this config as default and unset others
+  if ('is_default' in body) {
+    if (body.is_default) {
+      const [row] = db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, id)).all()
+      if (row) {
+        db.update(schema.aiServiceConfigs).set({ isDefault: false }).where(eq(schema.aiServiceConfigs.serviceType, row.serviceType)).run()
+      }
+      updates.isDefault = true
+    } else {
+      updates.isDefault = false
+    }
+  }
 
   db.update(schema.aiServiceConfigs).set(updates).where(eq(schema.aiServiceConfigs.id, id)).run()
   return success(c)
 })
 
 // DELETE /ai-configs/:id
-app.delete('/:id', async (c) => {
+app.delete('/:id', requireAdmin, async (c) => {
   const id = Number(c.req.param('id'))
   db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, id)).run()
   return success(c)

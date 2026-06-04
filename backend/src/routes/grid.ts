@@ -4,7 +4,7 @@ import { db, schema } from '../db/index.js'
 import { success, badRequest, now } from '../utils/response.js'
 import { generateImage } from '../services/image-generation.js'
 import { splitGridImage } from '../services/grid-split.js'
-import { createAgent } from '../agents/index.js'
+import { createAgent, getAgentGenerateOptions } from '../agents/index.js'
 import { logTaskError, logTaskPayload, logTaskProgress } from '../utils/task-logger.js'
 
 const app = new Hono()
@@ -371,7 +371,7 @@ async function tryAgentGridPrompt(
         '必须返回 JSON，结构为：{"grid_prompt":"...","cell_prompts":[{"shot_number":1,"frame_type":"first_frame","prompt":"..."}]}',
       ].join('\n'),
     }],
-    { maxSteps: 10 },
+    getAgentGenerateOptions('grid_prompt_generator', dramaId),
   )
 
   const fromTools = findGridPayload(result.toolResults)
@@ -518,6 +518,14 @@ app.post('/generate', async (c) => {
   const actualRows = rows
   const size = `${cellW * actualCols}x${cellH * actualRows}`
 
+  // 获取分镜图片配置
+  let storyboardConfigId: number | undefined
+  const gridEpisodeId = storyboards[0]?.episodeId
+  if (gridEpisodeId) {
+    const [ep] = db.select().from(schema.episodes).where(eq(schema.episodes.id, gridEpisodeId)).all()
+    storyboardConfigId = ep?.storyboardImageConfigId ?? ep?.imageConfigId ?? undefined
+  }
+
   try {
     const genId = await generateImage({
       dramaId: drama_id,
@@ -525,6 +533,7 @@ app.post('/generate', async (c) => {
       size,
       frameType: `grid_${mode}_${actualRows}x${actualCols}`,
       referenceImages,
+      configId: storyboardConfigId,
     })
 
     logTaskProgress('GridGenerate', 'reference-images', {

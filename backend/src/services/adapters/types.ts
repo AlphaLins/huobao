@@ -82,6 +82,7 @@ export interface ImageGenerationRecord {
   size?: string | null
   frameType?: string | null
   referenceImages?: string | null
+  imageType?: string | null
   // ... 其他字段
 }
 
@@ -122,6 +123,7 @@ export interface VideoPollResponse {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   videoUrl?: string
   error?: string
+  raw?: any
 }
 
 /**

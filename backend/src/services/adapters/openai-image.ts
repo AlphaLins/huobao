@@ -17,7 +17,7 @@ export class OpenAIImageAdapter implements ImageProviderAdapter {
   provider = 'openai'
 
   buildGenerateRequest(config: AIConfig, record: ImageGenerationRecord): ProviderRequest {
-    // OpenAI 使用 size 字段，格式为 "1024x1024"
+    // OpenAI uses size field, format is "1024x1024"
     const size = record.size || '1024x1024'
 
     const body: any = {
@@ -25,8 +25,10 @@ export class OpenAIImageAdapter implements ImageProviderAdapter {
       prompt: record.prompt,
       size,
       n: 1,
-      response_format: 'url', // 默认返回 URL，可选 'b64_json'
     }
+
+    // VIPStar proxy doesn't support response_format parameter for any model
+    // The API returns url directly in data[0].url
 
     return {
       url: joinProviderUrl(config.baseUrl, '/v1', '/images/generations'),

@@ -115,6 +115,16 @@
               <BaseSelect v-model="form.style" :options="styleSelectOptions" placeholder="选择风格" searchable />
             </label>
           </div>
+          <label class="field" style="grid-column: 1 / -1">
+            <span class="field-label">画面风格提示词</span>
+            <textarea
+              v-model="form.style_prompt"
+              class="input"
+              rows="3"
+              placeholder="描述画面风格，例如：写实摄影风格, 真实光影, 电影质感..."
+            />
+            <span class="field-hint">此提示词将全局应用到所有图片和视频生成</span>
+          </label>
           <div class="modal-actions">
             <button type="button" class="btn" @click="showCreate = false">取消</button>
             <button type="submit" class="btn btn-primary">
@@ -138,9 +148,24 @@ import BaseSelect from '~/components/BaseSelect.vue'
 const dramas = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
-const form = ref({ title: '', total_episodes: 1, style: '' })
+const form = ref({ title: '', total_episodes: 1, style: '', style_prompt: '' })
 const styles = ['realistic', 'anime', 'ghibli', 'cinematic', 'comic', 'watercolor']
 const styleSelectOptions = computed(() => styles.map(s => ({ label: s, value: s })))
+
+const STYLE_TEMPLATES = {
+  realistic: '写实摄影风格, 真实光影, 电影质感, 35mm胶片感, 自然色调',
+  anime: '日本动漫风格, 精致赛璐珞上色, 动漫人物比例, 鲜明色彩',
+  ghibli: '吉卜力工作室风格, 宫崎骏画风, 水彩质感, 柔和光线, 梦幻自然场景',
+  cinematic: '电影感画面, 宽银幕构图, 戏剧性光影, 浅景深, IMAX质感',
+  comic: '漫画风格, 粗线条, 半色调网点, 鲜明对比, 分格漫画感',
+  watercolor: '水彩画风格, 湿润边缘, 透明叠色, 纸张纹理, 柔和晕染',
+}
+
+watch(() => form.value.style, (val) => {
+  if (val && STYLE_TEMPLATES[val]) {
+    form.value.style_prompt = STYLE_TEMPLATES[val]
+  }
+})
 
 async function load() {
   loading.value = true

@@ -10,15 +10,20 @@ import { db, schema } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from '../utils/response.js'
 import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { emitTaskEvent } from '../utils/events.js'
+import { getAbsolutePath } from '../utils/storage.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = process.env.STORAGE_PATH || path.resolve(__dirname, '../../../data/static')
-const DATA_ROOT = path.resolve(__dirname, '../../../data')
 
 function toAbsPath(relativePath: string): string {
-  if (path.isAbsolute(relativePath)) return relativePath
-  if (relativePath.startsWith('static/')) return path.join(DATA_ROOT, relativePath)
-  return path.join(STORAGE_ROOT, relativePath)
+  return getAbsolutePath(relativePath)
+}
+
+function assertFileExists(filePath: string, label: string) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${label} file not found: ${filePath}`)
+  }
 }
 
 /**
@@ -57,25 +62,37 @@ export async function mergeEpisodeVideos(episodeId: number, dramaId: number): Pr
   const mergeId = Number(res.lastInsertRowid)
 
   // 异步执行
-  doMerge(mergeId, episodeId, videos).catch(err => {
+  doMerge(mergeId, episodeId, dramaId, videos).catch(err => {
     logTaskError('MergeTask', 'episode-merge', { mergeId, episodeId, error: err.message })
     console.error(`[Merge] Failed:`, err)
     db.update(schema.videoMerges)
       .set({ status: 'failed', errorMsg: err.message })
       .where(eq(schema.videoMerges.id, mergeId)).run()
+    emitTaskEvent({
+      type: 'merge',
+      status: 'failed',
+      id: mergeId,
+      dramaId,
+      episodeId,
+      errorMsg: err.message,
+    })
   })
 
   return mergeId
 }
 
-async function doMerge(mergeId: number, episodeId: number, videos: string[]) {
+async function doMerge(mergeId: number, episodeId: number, dramaId: number, videos: string[]) {
   // 生成 concat 列表文件
   const listDir = path.join(STORAGE_ROOT, 'temp')
   fs.mkdirSync(listDir, { recursive: true })
   const listPath = path.join(listDir, `${uuid()}.txt`)
 
   const listContent = videos
-    .map(v => `file '${toAbsPath(v)}'`)
+    .map((v, index) => {
+      const filePath = toAbsPath(v)
+      assertFileExists(filePath, `Merge input #${index + 1}`)
+      return `file '${filePath}'`
+    })
     .join('\n')
   fs.writeFileSync(listPath, listContent, 'utf-8')
 
@@ -91,8 +108,7 @@ async function doMerge(mergeId: number, episodeId: number, videos: string[]) {
       .inputOptions(['-f', 'concat', '-safe', '0'])
       .outputOptions([
         '-fflags', '+genpts',
-        '-c:v', 'libx264',
-        '-preset', 'medium',
+        '-c:v', 'h264_mf',
         '-crf', '23',
         '-c:a', 'aac',
         '-ar', '48000',
@@ -124,6 +140,15 @@ async function doMerge(mergeId: number, episodeId: number, videos: string[]) {
     .where(eq(schema.episodes.id, episodeId)).run()
 
   logTaskSuccess('MergeTask', 'episode-merge', { mergeId, episodeId, output: mergedRelative, duration, clips: videos.length })
+  emitTaskEvent({
+    type: 'merge',
+    status: 'completed',
+    id: mergeId,
+    dramaId,
+    episodeId,
+    localPath: mergedRelative,
+    mergedUrl: mergedRelative,
+  })
 }
 
 function getVideoDuration(filePath: string): Promise<number> {

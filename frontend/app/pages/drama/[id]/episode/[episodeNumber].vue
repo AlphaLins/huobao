@@ -21,6 +21,10 @@
 
       <div class="studio-topbar-side">
         <div class="studio-actions">
+          <button class="btn" @click="showConfigPanel = !showConfigPanel">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            配置
+          </button>
           <button class="btn" @click="refresh">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             刷新
@@ -32,6 +36,51 @@
         </div>
       </div>
     </header>
+
+    <!-- Config Switch Panel -->
+    <div v-if="showConfigPanel" class="config-switch-overlay" @click.self="showConfigPanel = false">
+      <div class="config-switch-panel card">
+        <div class="config-switch-head">
+          <div>
+            <div class="config-switch-title">生成配置</div>
+            <div class="config-switch-desc">切换当前集使用的 AI 服务配置，保存后立即生效</div>
+          </div>
+          <button class="back-btn" @click="showConfigPanel = false">关闭</button>
+        </div>
+        <div class="config-switch-grid">
+          <label class="config-switch-item">
+            <span class="config-switch-kicker">IMAGE</span>
+            <span class="config-switch-label">素材图片</span>
+            <span class="config-switch-hint">角色形象 · 场景背景</span>
+            <BaseSelect v-model="editImageConfigId" :options="imageConfigSelectOptions" placeholder="选择配置" searchable />
+          </label>
+          <label class="config-switch-item">
+            <span class="config-switch-kicker">STORYBOARD</span>
+            <span class="config-switch-label">分镜图片</span>
+            <span class="config-switch-hint">首帧 · 尾帧 · 宫格图</span>
+            <BaseSelect v-model="editStoryboardImageConfigId" :options="imageConfigSelectOptions" placeholder="选择配置" searchable />
+          </label>
+          <label class="config-switch-item">
+            <span class="config-switch-kicker">VIDEO</span>
+            <span class="config-switch-label">视频</span>
+            <span class="config-switch-hint">分镜视频生成</span>
+            <BaseSelect v-model="editVideoConfigId" :options="videoConfigSelectOptions" placeholder="选择配置" searchable />
+          </label>
+          <label class="config-switch-item">
+            <span class="config-switch-kicker">AUDIO</span>
+            <span class="config-switch-label">音频</span>
+            <span class="config-switch-hint">TTS 语音合成</span>
+            <BaseSelect v-model="editAudioConfigId" :options="audioConfigSelectOptions" placeholder="选择配置" searchable />
+          </label>
+        </div>
+        <div class="config-switch-foot">
+          <button class="btn" @click="showConfigPanel = false">取消</button>
+          <button class="btn btn-primary" :disabled="savingConfig" @click="saveEpisodeConfig">
+            {{ savingConfig ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="studio-body">
     <!-- ========== LEFT SIDEBAR ========== -->
@@ -91,14 +140,24 @@
     <!-- ========== MAIN CONTENT ========== -->
     <main class="main">
       <div v-if="activeSubSteps.length" class="stage-subnav">
+        <div class="stage-subnav-items">
+          <button
+            v-for="sub in activeSubSteps"
+            :key="sub.key"
+            :class="['stage-subnav-item', { active: activeSubStepKey === sub.key, done: sub.done }]"
+            @click="goSubStep(sub.key)"
+          >
+            <span>{{ sub.label }}</span>
+            <span v-if="sub.done" class="stage-subnav-dot"></span>
+          </button>
+        </div>
         <button
-          v-for="sub in activeSubSteps"
-          :key="sub.key"
-          :class="['stage-subnav-item', { active: activeSubStepKey === sub.key, done: sub.done }]"
-          @click="goSubStep(sub.key)"
+          v-if="activeClearModule"
+          class="btn btn-sm btn-danger-soft stage-clear-btn"
+          :disabled="clearingModule"
+          @click="clearActiveModule"
         >
-          <span>{{ sub.label }}</span>
-          <span v-if="sub.done" class="stage-subnav-dot"></span>
+          {{ clearingModule ? '清空中...' : '清空' }}
         </button>
       </div>
 
@@ -115,6 +174,10 @@
             </div>
             <div class="toolbar-right">
               <span v-if="rawLen" class="char-count">{{ rawLen }} 字</span>
+              <label class="btn btn-sm module-upload-btn" :class="{ disabled: isUploadingModule('document:content') }">
+                <input type="file" accept=".docx,.txt,.md" @change="uploadEpisodeDocument('content', $event)" />
+                {{ isUploadingModule('document:content') ? '上传中' : '上传文档' }}
+              </label>
               <button class="btn btn-sm" @click="saveRaw(); toast.success('已保存')">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 保存
@@ -473,6 +536,14 @@
                   <span class="detail-head-sub">{{ selectedSb.title || `镜头 ${sbs.indexOf(selectedSb) + 1}` }} · {{ selectedSb.shot_type || selectedSb.shotType || '未设置景别' }}</span>
                   </div>
                   <span class="tag mono">{{ (selectedSb.duration || 10) }}s</span>
+                  <label class="btn btn-sm module-upload-btn" :class="{ disabled: isUploadingModule(`storyboard:${selectedSb.id}:composed`) }">
+                    <input type="file" accept="image/*" @change="uploadModuleImage('storyboard', selectedSb.id, 'composed', $event)" />
+                    {{ isUploadingModule(`storyboard:${selectedSb.id}:composed`) ? '上传中' : '上传镜头图' }}
+                  </label>
+                  <label class="btn btn-sm module-upload-btn" :class="{ disabled: isUploadingModule(`storyboard:${selectedSb.id}:reference`) }">
+                    <input type="file" accept="image/*" @change="uploadModuleImage('storyboard', selectedSb.id, 'reference', $event)" />
+                    {{ isUploadingModule(`storyboard:${selectedSb.id}:reference`) ? '上传中' : '上传参考图' }}
+                  </label>
                   <button class="btn btn-ghost btn-icon ml-auto" style="color:var(--error)" @click="deleteShot(selectedSb)">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                   </button>
@@ -503,6 +574,10 @@
                         />
                         <div v-else class="detail-preview-empty">待生成</div>
                       </div>
+                      <label class="frame-upload-btn">
+                        上传首帧
+                        <input type="file" accept="image/*" @change="uploadShotFrame(selectedSb, 'first_frame', $event)" />
+                      </label>
                     </div>
                     <div class="detail-preview-card">
                       <div class="detail-preview-title">尾帧</div>
@@ -515,6 +590,10 @@
                         />
                         <div v-else class="detail-preview-empty">待生成</div>
                       </div>
+                      <label class="frame-upload-btn">
+                        上传尾帧
+                        <input type="file" accept="image/*" @change="uploadShotFrame(selectedSb, 'last_frame', $event)" />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -737,6 +816,38 @@
             </div>
           </div>
 
+          <div v-if="isImageHistoryTab && recentGeneratedImages.length" class="recent-images-panel">
+            <div class="recent-images-head">
+              <div>
+                <div class="recent-images-title">{{ recentGeneratedImagesTitle }}</div>
+                <div class="recent-images-subtitle">{{ recentGeneratedImagesSubtitle }}</div>
+              </div>
+              <button class="btn btn-sm" @click="loadRecentGeneratedImages">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                刷新
+              </button>
+            </div>
+            <div class="recent-images-list">
+              <button
+                v-for="item in recentGeneratedImages"
+                :key="item.id"
+                class="recent-image-item"
+                @click="openRecentGeneratedImage(item)"
+              >
+                <span class="recent-image-thumb">
+                  <img :src="'/' + item.localPath" />
+                </span>
+                <span class="recent-image-copy">
+                  <span class="recent-image-tags">
+                    <span class="tag" :class="item.isRefine ? 'tag-accent' : ''">{{ item.label }}</span>
+                    <span v-if="item.frameLabel" class="tag mono">{{ item.frameLabel }}</span>
+                  </span>
+                  <span class="recent-image-meta">{{ item.createdAtLabel }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <!-- Sub: Characters -->
           <div v-if="prodTab === 'chars'" class="prod-content">
             <div class="prod-section-bar">
@@ -744,6 +855,10 @@
               <span class="tag">{{ lockedImageConfigLabel }}</span>
               <span v-if="chars.length > visualChars.length" class="tag">旁白仅保留声音</span>
               <div class="ml-auto flex gap-1">
+                <button class="btn btn-sm" @click="refreshLatestGeneratedImages('chars')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  刷新最新图
+                </button>
                 <button class="btn btn-sm" @click="batchCharImages">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   批量生成
@@ -771,7 +886,11 @@
                 <div class="asset-foot">
                   <span :class="['dot', (c.image_url || c.imageUrl) && 'ok', isPendingCharImage(c.id) && 'pending']" />
                   <span class="dim" style="font-size:10px">{{ (c.image_url || c.imageUrl) ? '已生成' : (isPendingCharImage(c.id) ? '生成中' : '待生成') }}</span>
-                  <button class="btn btn-sm ml-auto" :disabled="isPendingCharImage(c.id)" @click="genCharImg(c.id)">{{ isPendingCharImage(c.id) ? '生成中' : '生成' }}</button>
+                  <label class="btn btn-sm ml-auto module-upload-btn" :class="{ disabled: isUploadingModule(`character:${c.id}`) }">
+                    <input type="file" accept="image/*" @change="uploadModuleImage('character', c.id, null, $event)" />
+                    {{ isUploadingModule(`character:${c.id}`) ? '上传中' : '上传' }}
+                  </label>
+                  <button class="btn btn-sm" :disabled="isPendingCharImage(c.id)" @click="genCharImg(c.id)">{{ isPendingCharImage(c.id) ? '生成中' : '生成' }}</button>
                 </div>
               </div>
             </div>
@@ -783,6 +902,10 @@
               <span class="dim" style="font-size:12px">{{ scenes.length }} 个场景</span>
               <span class="tag">{{ lockedImageConfigLabel }}</span>
               <div class="ml-auto flex gap-1">
+                <button class="btn btn-sm" @click="refreshLatestGeneratedImages('scenes')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  刷新最新图
+                </button>
                 <button class="btn btn-sm" @click="batchSceneImages">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   批量生成
@@ -810,7 +933,11 @@
                 <div class="asset-foot">
                   <span :class="['dot', (s.image_url || s.imageUrl) && 'ok', isPendingSceneImage(s.id) && 'pending']" />
                   <span class="dim" style="font-size:10px">{{ (s.image_url || s.imageUrl) ? '已生成' : (isPendingSceneImage(s.id) ? '生成中' : '待生成') }}</span>
-                  <button class="btn btn-sm ml-auto" :disabled="isPendingSceneImage(s.id)" @click="genSceneImg(s.id)">{{ isPendingSceneImage(s.id) ? '生成中' : '生成' }}</button>
+                  <label class="btn btn-sm ml-auto module-upload-btn" :class="{ disabled: isUploadingModule(`scene:${s.id}`) }">
+                    <input type="file" accept="image/*" @change="uploadModuleImage('scene', s.id, null, $event)" />
+                    {{ isUploadingModule(`scene:${s.id}`) ? '上传中' : '上传' }}
+                  </label>
+                  <button class="btn btn-sm" :disabled="isPendingSceneImage(s.id)" @click="genSceneImg(s.id)">{{ isPendingSceneImage(s.id) ? '生成中' : '生成' }}</button>
                 </div>
               </div>
             </div>
@@ -855,6 +982,18 @@
                   <span class="dim">{{ sb.duration || 10 }}s</span>
                   <span class="dim">{{ sb.location || '未设地点' }}</span>
                 </div>
+                <div class="dub-voice-row">
+                  <span class="voice-block-label">音色</span>
+                  <BaseSelect
+                    :model-value="getShotSelectedVoice(sb)"
+                    :options="voiceSelectOptions"
+                    placeholder="选择音色"
+                    searchable
+                    style="min-width:220px;flex:1"
+                    @update:model-value="setShotSelectedVoice(sb, $event)"
+                  />
+                  <span class="dim">{{ getShotVoiceHint(sb) }}</span>
+                </div>
                 <div class="dub-foot">
                   <audio v-if="hasTTS(sb)" :src="'/' + getTTSUrl(sb)" controls preload="none" class="dub-audio" />
                   <div v-else class="dim" style="font-size:12px">尚未生成语音文件</div>
@@ -872,6 +1011,10 @@
               <span class="tag">{{ lockedImageConfigLabel }}</span>
               <div class="ml-auto flex gap-1">
                 <BaseSelect v-model="frameMode" :options="frameModeOptions" placeholder="帧模式" searchable style="width:100px" />
+                <button class="btn btn-sm" @click="refreshLatestGeneratedImages('shots')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  刷新最新图
+                </button>
                 <button v-if="gridImagePath" class="btn btn-sm" @click="reopenGridPreview">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
                   查看当前宫格图
@@ -976,6 +1119,10 @@
                         </span>
                       </div>
                       <span class="frame-thumb-label">{{ isPendingShotFrame(sb.id, 'first_frame') ? '首帧生成中' : '首帧' }}</span>
+                      <label class="frame-upload-mini" title="上传本地首帧" @click.stop>
+                        上传
+                        <input type="file" accept="image/*" @change="uploadShotFrame(sb, 'first_frame', $event)" />
+                      </label>
                     </div>
                     <div v-if="frameMode === 'first_last'" class="frame-thumb-wrap">
                       <div class="frame-thumb" @click.stop="!isPendingShotFrame(sb.id, 'last_frame') && genShotFrame(sb, 'last_frame')">
@@ -994,6 +1141,10 @@
                         </span>
                       </div>
                       <span class="frame-thumb-label">{{ isPendingShotFrame(sb.id, 'last_frame') ? '尾帧生成中' : '尾帧' }}</span>
+                      <label class="frame-upload-mini" title="上传本地尾帧" @click.stop>
+                        上传
+                        <input type="file" accept="image/*" @change="uploadShotFrame(sb, 'last_frame', $event)" />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1194,6 +1345,18 @@
               <span class="dim" style="font-size:12px">{{ sbs.length }} 个镜头</span>
               <span class="tag mono">{{ shotVidCount }}/{{ sbs.length }} 已生成</span>
               <div class="ml-auto flex gap-1">
+                <div class="scope-toggle">
+                  <button :class="['scope-toggle-btn', { active: videoHistoryScope === 'shot' }]" @click="videoHistoryScope = 'shot'; loadVideoHistories()">本镜头</button>
+                  <button :class="['scope-toggle-btn', { active: videoHistoryScope === 'episode' }]" @click="videoHistoryScope = 'episode'; loadVideoHistories()">本集</button>
+                </div>
+                <button class="btn btn-sm" @click="loadVideoHistories">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  刷新历史
+                </button>
+                <button class="btn btn-sm" :disabled="exportingGeneratedVideos || !shotVidCount" @click="exportGeneratedVideos">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  {{ exportingGeneratedVideos ? '\u5bfc\u51fa\u4e2d...' : '\u5bfc\u51fa\u5df2\u751f\u6210\u89c6\u9891' }}
+                </button>
                 <button class="btn btn-sm" @click="batchVideos">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                   批量视频
@@ -1233,10 +1396,59 @@
                   <div v-if="videoFailMessage(sb.id)" class="prod-error">{{ videoFailMessage(sb.id) }}</div>
                 </div>
                 <div class="prod-actions">
+                  <BaseSelect
+                    :model-value="videoDurationForShot(sb)"
+                    :options="videoDurationOptions"
+                    class="video-duration-select"
+                    placeholder="时长"
+                    @update:model-value="setVideoDurationForShot(sb, $event)"
+                  />
                   <button class="btn btn-sm" :disabled="isPendingVideo(sb.id)" @click="genVid(sb)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                     {{ isPendingVideo(sb.id) ? '生成中' : '生成视频' }}
                   </button>
+                </div>
+                <div v-if="getVideoHistory(sb).length" class="video-history-list">
+                  <div class="video-history-head">
+                    <span>历史视频</span>
+                    <span class="dim">{{ videoHistoryScope === 'shot' ? '本镜头' : '本集' }}</span>
+                  </div>
+                  <div class="video-history-scroll">
+                    <div
+                      v-for="item in getVideoHistory(sb)"
+                      :key="item.id"
+                      :class="['video-history-item', { active: isCurrentVideo(sb, item), failed: item.status === 'failed' }]"
+                    >
+                      <video
+                        v-if="item.playUrl"
+                        :src="'/' + item.playUrl"
+                        class="video-history-thumb"
+                        controls
+                        preload="metadata"
+                        playsinline
+                      />
+                      <div v-else class="video-history-thumb video-history-empty">
+                        <Loader2 v-if="item.status === 'processing'" :size="14" class="animate-spin" />
+                        <span v-else>{{ item.statusLabel }}</span>
+                      </div>
+                      <div class="video-history-copy">
+                        <div class="video-history-tags">
+                          <span class="tag mono">#{{ item.id }}</span>
+                          <span class="tag">{{ item.statusLabel }}</span>
+                          <span v-if="item.referenceModeLabel" class="tag">{{ item.referenceModeLabel }}</span>
+                        </div>
+                        <div class="video-history-meta">{{ item.createdAtLabel }}</div>
+                        <div v-if="item.errorMsg" class="prod-error">{{ item.errorMsg }}</div>
+                      </div>
+                      <button
+                        class="btn btn-sm"
+                        :disabled="item.status !== 'completed' || isCurrentVideo(sb, item) || settingCurrentVideoIds.includes(item.id)"
+                        @click="setCurrentVideo(sb, item)"
+                      >
+                        {{ isCurrentVideo(sb, item) ? '当前视频' : '设为当前视频' }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1421,12 +1633,123 @@
         <div class="card image-viewer-dialog">
           <div class="image-viewer-head">
             <div class="image-viewer-title">{{ imageViewer.title || '图片预览' }}</div>
+            <div v-if="imageViewer.context" class="image-viewer-actions">
+              <button class="btn btn-sm" @click="downloadViewerImage">
+                下载
+              </button>
+              <button class="btn btn-sm" :disabled="refineDialog.open" @click="openRefineDialogFromViewer">微调</button>
+              <button class="btn btn-sm" :disabled="settingCurrentImage" @click="setViewerImageAsCurrent">
+                {{ settingCurrentImage ? '设置中...' : '设为当前图' }}
+              </button>
+            </div>
+            <button v-else class="btn btn-sm" @click="downloadViewerImage">
+              下载
+            </button>
             <button class="btn btn-ghost btn-icon" @click="closeImageViewer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div class="image-viewer-body">
             <img :src="imageViewer.src" :alt="imageViewer.title || '图片预览'" class="image-viewer-img" />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="refineDialog.open" class="overlay refine-dialog-overlay" @click.self="closeRefineDialog">
+        <div class="card refine-dialog-card">
+          <div class="prompt-preview-head">
+            <div>
+              <div class="prompt-preview-title">图片微调</div>
+              <div class="prompt-preview-meta">
+                <span v-if="refineDialog.provider" class="tag">{{ refineDialog.provider }}</span>
+                <span v-if="refineDialog.model" class="tag mono">{{ refineDialog.model }}</span>
+                <span v-if="refineDialog.size" class="tag mono">{{ refineDialog.size }}</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-icon" @click="closeRefineDialog">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="refine-dialog-body">
+            <div class="refine-source-pane">
+              <img :src="'/' + refineDialog.imagePath" class="refine-source-img" />
+            </div>
+            <div class="refine-form-pane">
+              <label class="prompt-preview-label">需要修改的地方</label>
+              <textarea v-model="refineDialog.instruction" class="refine-instruction" placeholder="例如：把衣服改成红色，保持人物脸部、构图和光线不变" />
+              <button class="btn" :disabled="refineDialog.previewing || !refineDialog.instruction.trim()" @click="previewRefinePrompt">
+                {{ refineDialog.previewing ? '生成中...' : '生成提示词预览' }}
+              </button>
+              <template v-if="refineDialog.prompt">
+                <label class="prompt-preview-label">生成比例</label>
+                <BaseSelect v-model="refineDialog.size" :options="imageSizeOptions" placeholder="选择比例" searchable />
+                <label class="prompt-preview-label">最终提交给模型的提示词</label>
+                <textarea v-model="refineDialog.prompt" class="prompt-preview-textarea refine-prompt-textarea" spellcheck="false" />
+              </template>
+            </div>
+          </div>
+          <div class="prompt-preview-foot">
+            <button class="btn" :disabled="refineDialog.submitting || !refineDialog.defaultPrompt" @click="resetRefinePrompt">恢复默认</button>
+            <button class="btn ml-auto" :disabled="refineDialog.submitting" @click="closeRefineDialog">取消</button>
+            <button class="btn btn-primary" :disabled="refineDialog.submitting || !refineDialog.prompt.trim()" @click="submitRefineImage">
+              {{ refineDialog.submitting ? '提交中...' : '确认微调生成' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="promptDialog.open" class="overlay prompt-preview-overlay" @click.self="closePromptDialog">
+        <div class="card prompt-preview-card">
+          <div class="prompt-preview-head">
+            <div>
+              <div class="prompt-preview-title">{{ promptDialog.title }}</div>
+              <div class="prompt-preview-meta">
+                <span class="tag">{{ promptDialog.provider || 'provider' }}</span>
+                <span class="tag mono">{{ promptDialog.model || 'model' }}</span>
+                <span v-if="promptDialog.size" class="tag mono">{{ promptDialog.size }}</span>
+                <span v-if="promptDialog.duration" class="tag mono">{{ promptDialog.duration }}s</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-icon" @click="closePromptDialog">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="prompt-preview-body">
+            <label v-if="promptDialog.kind === 'image'" class="prompt-preview-label">生成比例</label>
+            <BaseSelect
+              v-if="promptDialog.kind === 'image'"
+              v-model="promptDialog.size"
+              :options="imageSizeOptions"
+              placeholder="选择比例"
+              searchable
+            />
+            <label v-if="promptDialog.kind === 'video'" class="prompt-preview-label">本次视频时长</label>
+            <BaseSelect
+              v-if="promptDialog.kind === 'video'"
+              v-model="promptDialog.duration"
+              :options="videoDurationOptions"
+              placeholder="选择时长"
+            />
+            <label class="prompt-preview-label">最终提交给模型的提示词</label>
+            <textarea v-model="promptDialog.prompt" class="prompt-preview-textarea" spellcheck="false" />
+            <div v-if="promptDialog.stylePrompt" class="prompt-preview-note">
+              <span class="dim">已注入风格：</span>{{ promptDialog.stylePrompt }}
+            </div>
+            <div v-if="promptDialog.referenceImages?.length" class="prompt-preview-refs">
+              <div class="prompt-preview-label">参考图 {{ promptDialog.referenceImages.length }}</div>
+              <div class="prompt-ref-list">
+                <button v-for="ref in promptDialog.referenceImages" :key="ref" class="prompt-ref-thumb" @click="openImageViewer('/' + ref, '参考图')">
+                  <img :src="'/' + ref" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="prompt-preview-foot">
+            <button class="btn" :disabled="promptDialog.submitting" @click="resetPromptDialog">恢复默认</button>
+            <button class="btn ml-auto" :disabled="promptDialog.submitting" @click="closePromptDialog">取消</button>
+            <button class="btn btn-primary" :disabled="promptDialog.submitting || !promptDialog.prompt.trim()" @click="submitPromptDialog">
+              {{ promptDialog.submitting ? '提交中...' : '确认生成' }}
+            </button>
           </div>
         </div>
       </div>
@@ -1438,9 +1761,9 @@
 <script setup>
 import { toast } from 'vue-sonner'
 import {
-  Users, MapPin, Video, ImageIcon, Layers, Mic2, FileText, FolderKanban, Clapperboard, Download,
+  Users, MapPin, Video, ImageIcon, Layers, Mic2, FileText, FolderKanban, Clapperboard, Download, Loader2,
 } from 'lucide-vue-next'
-import { dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, imageAPI, videoAPI, composeAPI, mergeAPI, gridAPI, aiConfigAPI, voicesAPI } from '~/composables/useApi'
+import { dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, imageAPI, videoAPI, composeAPI, mergeAPI, gridAPI, aiConfigAPI, voicesAPI, uploadAPI } from '~/composables/useApi'
 import { useAgent } from '~/composables/useAgent'
 import BaseSelect from '~/components/BaseSelect.vue'
 
@@ -1452,7 +1775,7 @@ const episodeNumber = Number(route.params.episodeNumber)
 
 const drama = ref(null), episode = ref(null), chars = ref([]), scenes = ref([]), sbs = ref([]), mergeData = ref(null)
 const panel = ref('script')
-const { running: rn, runningType: rt, run: runAgent } = useAgent()
+const { running: rn, runningType: rt, run: runAgent } = useAgent();
 
 const localRaw = ref(''), localScript = ref('')
 const rawContent = computed(() => episode.value?.content || '')
@@ -1473,14 +1796,39 @@ const prodTabIdx = computed({
 })
 const frameMode = ref('first')
 const fallbackVoiceProfiles = [
-  { id: 'alloy', label: 'Alloy', gender: '中性', traits: '平衡、自然、克制', suitable: '通用叙述、旁白、需要稳定输出的角色' },
-  { id: 'echo', label: 'Echo', gender: '男声', traits: '低沉、稳重、冷静', suitable: '成熟男性、父辈、旁白、压迫感角色' },
-  { id: 'fable', label: 'Fable', gender: '男声', traits: '温暖、讲述感、表现力强', suitable: '男主、成长型角色、叙事担当' },
-  { id: 'onyx', label: 'Onyx', gender: '男声', traits: '深沉、有力、权威', suitable: '反派、强势角色、掌控型人物' },
-  { id: 'nova', label: 'Nova', gender: '女声', traits: '温柔、甜润、亲和', suitable: '女主、母亲、柔和配角' },
-  { id: 'shimmer', label: 'Shimmer', gender: '女声', traits: '明亮、活泼、年轻', suitable: '少女、轻快角色、跳脱配角' },
+  { id: 'Zephyr', label: 'Zephyr', gender: 'Neutral', traits: 'Bright', suitable: 'Gemini TTS native voice' },
+  { id: 'Puck', label: 'Puck', gender: 'Neutral', traits: 'Upbeat', suitable: 'Gemini TTS native voice' },
+  { id: 'Charon', label: 'Charon', gender: 'Neutral', traits: 'Informative', suitable: 'Gemini TTS native voice' },
+  { id: 'Kore', label: 'Kore', gender: 'Neutral', traits: 'Firm', suitable: 'Gemini TTS native voice' },
+  { id: 'Fenrir', label: 'Fenrir', gender: 'Neutral', traits: 'Excitable', suitable: 'Gemini TTS native voice' },
+  { id: 'Leda', label: 'Leda', gender: 'Neutral', traits: 'Youthful', suitable: 'Gemini TTS native voice' },
+  { id: 'Orus', label: 'Orus', gender: 'Neutral', traits: 'Firm', suitable: 'Gemini TTS native voice' },
+  { id: 'Aoede', label: 'Aoede', gender: 'Neutral', traits: 'Breezy', suitable: 'Gemini TTS native voice' },
+  { id: 'Callirrhoe', label: 'Callirrhoe', gender: 'Neutral', traits: 'Easy-going', suitable: 'Gemini TTS native voice' },
+  { id: 'Autonoe', label: 'Autonoe', gender: 'Neutral', traits: 'Bright', suitable: 'Gemini TTS native voice' },
+  { id: 'Enceladus', label: 'Enceladus', gender: 'Neutral', traits: 'Breathy', suitable: 'Gemini TTS native voice' },
+  { id: 'Iapetus', label: 'Iapetus', gender: 'Neutral', traits: 'Clear', suitable: 'Gemini TTS native voice' },
+  { id: 'Umbriel', label: 'Umbriel', gender: 'Neutral', traits: 'Easy-going', suitable: 'Gemini TTS native voice' },
+  { id: 'Algieba', label: 'Algieba', gender: 'Neutral', traits: 'Smooth', suitable: 'Gemini TTS native voice' },
+  { id: 'Despina', label: 'Despina', gender: 'Neutral', traits: 'Smooth', suitable: 'Gemini TTS native voice' },
+  { id: 'Erinome', label: 'Erinome', gender: 'Neutral', traits: 'Clear', suitable: 'Gemini TTS native voice' },
+  { id: 'Algenib', label: 'Algenib', gender: 'Neutral', traits: 'Gravelly', suitable: 'Gemini TTS native voice' },
+  { id: 'Rasalgethi', label: 'Rasalgethi', gender: 'Neutral', traits: 'Informative', suitable: 'Gemini TTS native voice' },
+  { id: 'Laomedeia', label: 'Laomedeia', gender: 'Neutral', traits: 'Upbeat', suitable: 'Gemini TTS native voice' },
+  { id: 'Achernar', label: 'Achernar', gender: 'Neutral', traits: 'Soft', suitable: 'Gemini TTS native voice' },
+  { id: 'Alnilam', label: 'Alnilam', gender: 'Neutral', traits: 'Firm', suitable: 'Gemini TTS native voice' },
+  { id: 'Schedar', label: 'Schedar', gender: 'Neutral', traits: 'Even', suitable: 'Gemini TTS native voice' },
+  { id: 'Gacrux', label: 'Gacrux', gender: 'Neutral', traits: 'Mature', suitable: 'Gemini TTS native voice' },
+  { id: 'Pulcherrima', label: 'Pulcherrima', gender: 'Neutral', traits: 'Forward', suitable: 'Gemini TTS native voice' },
+  { id: 'Achird', label: 'Achird', gender: 'Neutral', traits: 'Friendly', suitable: 'Gemini TTS native voice' },
+  { id: 'Zubenelgenubi', label: 'Zubenelgenubi', gender: 'Neutral', traits: 'Casual', suitable: 'Gemini TTS native voice' },
+  { id: 'Vindemiatrix', label: 'Vindemiatrix', gender: 'Neutral', traits: 'Gentle', suitable: 'Gemini TTS native voice' },
+  { id: 'Sadachbia', label: 'Sadachbia', gender: 'Neutral', traits: 'Lively', suitable: 'Gemini TTS native voice' },
+  { id: 'Sadaltager', label: 'Sadaltager', gender: 'Neutral', traits: 'Knowledgeable', suitable: 'Gemini TTS native voice' },
+  { id: 'Sulafat', label: 'Sulafat', gender: 'Neutral', traits: 'Warm', suitable: 'Gemini TTS native voice' },
 ]
 const voiceProfiles = ref(fallbackVoiceProfiles)
+const selectedTTSVoices = ref({})
 const voiceSelectOptions = computed(() => voiceProfiles.value.map(v => ({ label: `${v.label} · ${v.traits}`, value: v.id })))
 const videoConfigSelectOptions = computed(() => videoConfigs.value.map(c => {
   let modelName = ''
@@ -1498,6 +1846,56 @@ const gridLayoutOptions = [
 const imageConfigs = ref([])
 const videoConfigs = ref([])
 const audioConfigs = ref([])
+
+// Config switcher
+const showConfigPanel = ref(false)
+const savingConfig = ref(false)
+const editImageConfigId = ref(null)
+const editStoryboardImageConfigId = ref(null)
+const editVideoConfigId = ref(null)
+const editAudioConfigId = ref(null)
+
+const imageConfigSelectOptions = computed(() => imageConfigs.value.filter(c => c.is_active !== false).map(c => ({ label: configLabel(c), value: c.id })))
+const audioConfigSelectOptions = computed(() => audioConfigs.value.filter(c => c.is_active !== false).map(c => ({ label: configLabel(c), value: c.id })))
+
+watch(showConfigPanel, (v) => {
+  if (v) {
+    editImageConfigId.value = lockedImageConfigId.value
+    editStoryboardImageConfigId.value = lockedStoryboardImageConfigId.value
+    editVideoConfigId.value = lockedVideoConfigId.value
+    editAudioConfigId.value = lockedAudioConfigId.value
+  }
+})
+
+async function saveEpisodeConfig() {
+  savingConfig.value = true
+  try {
+    const updates = {
+      image_config_id: editImageConfigId.value,
+      storyboard_image_config_id: editStoryboardImageConfigId.value,
+      video_config_id: editVideoConfigId.value,
+      audio_config_id: editAudioConfigId.value,
+    }
+    await episodeAPI.update(episode.value.id, updates)
+    if (episode.value) Object.assign(episode.value, {
+      image_config_id: updates.image_config_id,
+      imageConfigId: updates.image_config_id,
+      storyboard_image_config_id: updates.storyboard_image_config_id,
+      storyboardImageConfigId: updates.storyboard_image_config_id,
+      video_config_id: updates.video_config_id,
+      videoConfigId: updates.video_config_id,
+      audio_config_id: updates.audio_config_id,
+      audioConfigId: updates.audio_config_id,
+    })
+    showConfigPanel.value = false
+    toast.success('配置已更新，后续生成将使用新配置')
+    refresh()
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    savingConfig.value = false
+  }
+}
 const pendingCharImageIds = ref([])
 const pendingSceneImageIds = ref([])
 const pendingShotFrameKeys = ref([])
@@ -1505,7 +1903,78 @@ const pendingVideoIds = ref([])
 const pendingComposeIds = ref([])
 const failedVideoMessages = ref({})
 const failedComposeMessages = ref({})
-const imageViewer = ref({ open: false, src: '', title: '' })
+const recentGeneratedImages = ref([])
+const videoHistoryScope = ref('shot')
+const videoHistoryByStoryboard = ref({})
+const settingCurrentVideoIds = ref([])
+const exportingGeneratedVideos = ref(false)
+const imageViewer = ref({ open: false, src: '', title: '', context: null })
+const uploadingShotFrameKeys = ref([])
+const uploadingModuleKeys = ref([])
+const settingCurrentImage = ref(false)
+const refineDialog = ref({
+  open: false,
+  imagePath: '',
+  instruction: '',
+  prompt: '',
+  defaultPrompt: '',
+  provider: '',
+  model: '',
+  size: '',
+  sourceImageGenerationId: null,
+  context: null,
+  previewing: false,
+  submitting: false,
+})
+const imageSizeOptions = [
+  { label: '16:9 横屏 1920x1080', value: '1920x1080' },
+  { label: '9:16 竖屏 1080x1920', value: '1080x1920' },
+  { label: '1:1 方图 1024x1024', value: '1024x1024' },
+  { label: '4:3 横图 1152x864', value: '1152x864' },
+  { label: '3:4 竖图 864x1152', value: '864x1152' },
+  { label: '3:2 横图 1536x1024', value: '1536x1024' },
+  { label: '2:3 竖图 1024x1536', value: '1024x1536' },
+  { label: '21:9 宽银幕 1456x624', value: '1456x624' },
+]
+const videoDurationOptions = [
+  { label: '4 秒', value: 4 },
+  { label: '8 秒', value: 8 },
+  { label: '12 秒', value: 12 },
+]
+const videoDurationByShot = ref({})
+const promptDialog = ref({
+  open: false,
+  kind: 'image',
+  title: '',
+  prompt: '',
+  defaultPrompt: '',
+  provider: '',
+  model: '',
+  size: '',
+  duration: 0,
+  stylePrompt: '',
+  referenceImages: [],
+  referenceMode: '',
+  firstFrameUrl: '',
+  lastFrameUrl: '',
+  submitting: false,
+  submit: null,
+})
+
+function defaultVideoDuration(sb) {
+  const value = Number(sb?.duration || 8)
+  if (value <= 4) return 4
+  if (value <= 8) return 8
+  return 12
+}
+
+function videoDurationForShot(sb) {
+  return Number(videoDurationByShot.value[sb.id] || defaultVideoDuration(sb))
+}
+
+function setVideoDurationForShot(sb, value) {
+  videoDurationByShot.value = { ...videoDurationByShot.value, [sb.id]: Number(value || defaultVideoDuration(sb)) }
+}
 
 function configLabel(config) {
   if (!config) return '未配置'
@@ -1518,16 +1987,389 @@ function isPendingCharImage(id) {
   return pendingCharImageIds.value.includes(id)
 }
 
-function openImageViewer(src, title = '') {
+function normalizeImageViewerPath(src) {
+  return String(src || '').trim().replace(/^\/+/, '')
+}
+
+function sameImagePath(a, b) {
+  return normalizeImageViewerPath(a) === normalizeImageViewerPath(b)
+}
+
+function inferImageContext(src) {
+  const path = normalizeImageViewerPath(src)
+  if (!path) return null
+
+  const char = chars.value.find(c => sameImagePath(c.image_url || c.imageUrl, path))
+  if (char) return { character_id: char.id, drama_id: dramaId, kind: 'character' }
+
+  const scene = scenes.value.find(s => sameImagePath(s.image_url || s.imageUrl, path))
+  if (scene) return { scene_id: scene.id, drama_id: dramaId, kind: 'scene' }
+
+  const firstFrame = sbs.value.find(sb => sameImagePath(getFirstFrame(sb), path))
+  if (firstFrame) return { storyboard_id: firstFrame.id, drama_id: dramaId, frame_type: 'first_frame', kind: 'storyboard' }
+
+  const lastFrame = sbs.value.find(sb => sameImagePath(getLastFrame(sb), path))
+  if (lastFrame) return { storyboard_id: lastFrame.id, drama_id: dramaId, frame_type: 'last_frame', kind: 'storyboard' }
+
+  const cover = sbs.value.find(sb => sameImagePath(getStoryboardCover(sb), path))
+  if (cover) return { storyboard_id: cover.id, drama_id: dramaId, frame_type: 'composed', kind: 'storyboard' }
+
+  return null
+}
+
+function openImageViewer(src, title = '', context = null) {
   if (!src) return
-  imageViewer.value = { open: true, src, title }
+  imageViewer.value = { open: true, src, title, context: context || inferImageContext(src) }
 }
 
 function closeImageViewer() {
-  imageViewer.value = { open: false, src: '', title: '' }
+  imageViewer.value = { open: false, src: '', title: '', context: null }
+}
+
+function downloadImageName(viewer) {
+  const src = normalizeImageViewerPath(viewer?.src || '')
+  const ext = (src.match(/\.[a-z0-9]+$/i)?.[0] || '.png').toLowerCase()
+  const title = String(viewer?.title || 'huobao-image')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80) || 'huobao-image'
+  return `${title}${ext}`
+}
+
+async function downloadViewerImage() {
+  const src = imageViewer.value.src
+  if (!src) return
+  const filename = downloadImageName(imageViewer.value)
+  try {
+    const resp = await fetch(src)
+    if (!resp.ok) throw new Error(`${resp.status}`)
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    window.open(src, '_blank', 'noopener')
+  }
+}
+
+function closePromptDialog() {
+  if (promptDialog.value.submitting) return
+  promptDialog.value.open = false
+}
+
+function resetPromptDialog() {
+  promptDialog.value.prompt = promptDialog.value.defaultPrompt
+}
+
+async function openPromptDialog({ title, preview, submit, kind = 'image', duration }) {
+  promptDialog.value = {
+    open: true,
+    kind,
+    title,
+    prompt: preview.prompt || '',
+    defaultPrompt: preview.prompt || '',
+    provider: preview.provider || '',
+    model: preview.model || '',
+    size: preview.size || '',
+    duration: duration || preview.duration || 0,
+    stylePrompt: preview.style_prompt || preview.stylePrompt || '',
+    referenceImages: preview.reference_images || preview.referenceImages || [],
+    referenceMode: preview.reference_mode || preview.referenceMode || '',
+    firstFrameUrl: preview.first_frame_url || preview.firstFrameUrl || '',
+    lastFrameUrl: preview.last_frame_url || preview.lastFrameUrl || '',
+    submitting: false,
+    submit,
+  }
+}
+
+async function submitPromptDialog() {
+  const dialog = promptDialog.value
+  if (!dialog.submit || !dialog.prompt.trim()) return
+  dialog.submitting = true
+  try {
+    await dialog.submit(dialog.prompt.trim(), dialog)
+    dialog.open = false
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    dialog.submitting = false
+  }
+}
+
+function openRefineDialogFromViewer() {
+  const src = imageViewer.value.src
+  const context = imageViewer.value.context
+  const imagePath = normalizeImageViewerPath(src)
+  if (!imagePath || !context) return
+  refineDialog.value = {
+    open: true,
+    imagePath,
+    instruction: '',
+    prompt: '',
+    defaultPrompt: '',
+    provider: '',
+    model: '',
+    size: '',
+    sourceImageGenerationId: null,
+    context,
+    previewing: false,
+    submitting: false,
+  }
+}
+
+function closeRefineDialog() {
+  if (refineDialog.value.previewing || refineDialog.value.submitting) return
+  refineDialog.value.open = false
+}
+
+function resetRefinePrompt() {
+  refineDialog.value.prompt = refineDialog.value.defaultPrompt
+}
+
+function refinePayloadBase() {
+  const dialog = refineDialog.value
+  const context = dialog.context || {}
+  const payload = {
+    image_path: dialog.imagePath,
+    instruction: dialog.instruction,
+    size: dialog.size || undefined,
+    drama_id: context.drama_id || dramaId,
+    character_id: context.character_id,
+    scene_id: context.scene_id,
+    storyboard_id: context.storyboard_id,
+    frame_type: context.frame_type,
+  }
+  Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key])
+  return payload
+}
+
+function imageContextFromTask(data) {
+  if (!data) return null
+  if (data.characterId) return { character_id: data.characterId, drama_id: data.dramaId || dramaId, kind: 'character' }
+  if (data.sceneId) return { scene_id: data.sceneId, drama_id: data.dramaId || dramaId, kind: 'scene' }
+  if (data.storyboardId) {
+    return {
+      storyboard_id: data.storyboardId,
+      drama_id: data.dramaId || dramaId,
+      frame_type: data.frameType || 'composed',
+      kind: 'storyboard',
+    }
+  }
+  return null
+}
+
+function imageContextFromGeneration(row) {
+  const characterId = row?.character_id || row?.characterId
+  if (characterId) return { character_id: characterId, drama_id: row?.drama_id || row?.dramaId || dramaId, kind: 'character' }
+  const sceneId = row?.scene_id || row?.sceneId
+  if (sceneId) return { scene_id: sceneId, drama_id: row?.drama_id || row?.dramaId || dramaId, kind: 'scene' }
+  const storyboardId = row?.storyboard_id || row?.storyboardId
+  if (storyboardId) {
+    return {
+      storyboard_id: storyboardId,
+      drama_id: row?.drama_id || row?.dramaId || dramaId,
+      frame_type: row?.frame_type || row?.frameType || 'composed',
+      kind: 'storyboard',
+    }
+  }
+  return null
+}
+
+function generationLabel(row) {
+  if ((row?.image_type || row?.imageType) === 'refine') return '微调'
+  if (row?.character_id || row?.characterId) return '角色'
+  if (row?.scene_id || row?.sceneId) return '场景'
+  if (row?.storyboard_id || row?.storyboardId) return '分镜'
+  return '图片'
+}
+
+function generationFrameLabel(row) {
+  const frameType = row?.frame_type || row?.frameType || ''
+  if (frameType === 'first_frame') return '首帧'
+  if (frameType === 'last_frame') return '尾帧'
+  if (frameType === 'composed') return '镜头图'
+  return frameType && !String(frameType).startsWith('grid_') ? frameType : ''
+}
+
+function formatGenerationTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function normalizeGeneratedImage(row) {
+  const localPath = row?.local_path || row?.localPath
+  if (!localPath) return null
+  const frameType = row?.frame_type || row?.frameType || ''
+  if (String(frameType).startsWith('grid_')) return null
+  return {
+    id: row.id,
+    localPath,
+    label: generationLabel(row),
+    frameLabel: generationFrameLabel(row),
+    isRefine: (row?.image_type || row?.imageType) === 'refine',
+    createdAtLabel: formatGenerationTime(row?.created_at || row?.createdAt),
+    context: imageContextFromGeneration(row),
+    raw: row,
+  }
+}
+
+function currentImageHistoryScope() {
+  if (prodTab.value === 'chars') return 'character'
+  if (prodTab.value === 'scenes') return 'scene'
+  if (prodTab.value === 'shots') return 'storyboard'
+  return 'all'
+}
+
+function imageMatchesHistoryScope(item, scope = currentImageHistoryScope()) {
+  if (!item) return false
+  if (scope === 'all') return true
+  return item.context?.kind === scope
+}
+
+const isImageHistoryTab = computed(() => ['chars', 'scenes', 'shots'].includes(prodTab.value))
+
+const recentGeneratedImagesTitle = computed(() => {
+  if (prodTab.value === 'chars') return '最近生成角色图'
+  if (prodTab.value === 'scenes') return '最近生成场景图'
+  if (prodTab.value === 'shots') return '最近生成分镜图'
+  return '最近生成图片'
+})
+
+const recentGeneratedImagesSubtitle = computed(() => {
+  if (prodTab.value === 'chars') return '只显示角色形象相关的历史图和微调结果'
+  if (prodTab.value === 'scenes') return '只显示场景图片相关的历史图和微调结果'
+  if (prodTab.value === 'shots') return '只显示镜头首帧、尾帧和分镜图历史'
+  return '微调结果和历史生成图会保留在这里，关闭预览后可重新打开'
+})
+
+async function loadRecentGeneratedImages() {
+  try {
+    const rows = await imageAPI.list({ drama_id: dramaId, status: 'completed', limit: 100 })
+    recentGeneratedImages.value = (Array.isArray(rows) ? rows : [])
+      .sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))
+      .map(normalizeGeneratedImage)
+      .filter(Boolean)
+      .filter(item => imageMatchesHistoryScope(item))
+      .slice(0, 20)
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+function upsertRecentGeneratedImage(row) {
+  if (row?.status && row.status !== 'completed') return
+  const item = normalizeGeneratedImage(row)
+  if (!item) return
+  if (!imageMatchesHistoryScope(item)) return
+  recentGeneratedImages.value = [
+    item,
+    ...recentGeneratedImages.value.filter(existing => existing.id !== item.id),
+  ].slice(0, 20)
+}
+
+function openRecentGeneratedImage(item) {
+  if (!item?.localPath) return
+  openImageViewer('/' + item.localPath, `${item.label}${item.frameLabel ? ` · ${item.frameLabel}` : ''}`, item.context)
+}
+
+async function previewRefinePrompt() {
+  const dialog = refineDialog.value
+  if (!dialog.instruction.trim()) return
+  dialog.previewing = true
+  try {
+    const preview = await imageAPI.refinePreview(refinePayloadBase())
+    dialog.prompt = preview.prompt || ''
+    dialog.defaultPrompt = preview.prompt || ''
+    dialog.provider = preview.provider || ''
+    dialog.model = preview.model || ''
+    dialog.size = preview.size || ''
+    dialog.sourceImageGenerationId = preview.source_image_generation_id || preview.sourceImageGenerationId || null
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    dialog.previewing = false
+  }
+}
+
+async function submitRefineImage() {
+  const dialog = refineDialog.value
+  if (!dialog.prompt.trim()) return
+  dialog.submitting = true
+  try {
+    const body = {
+      ...refinePayloadBase(),
+      prompt: dialog.prompt.trim(),
+      image_generation_id: dialog.sourceImageGenerationId || undefined,
+    }
+    const record = await imageAPI.refine(body)
+    waitForRefineResult(record?.id, dialog.context)
+    toast.success('微调任务已提交，生成完成后会进入历史，不会覆盖当前图')
+    dialog.open = false
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    dialog.submitting = false
+  }
+}
+
+function waitForRefineResult(id, context) {
+  if (!id) return
+  void (async () => {
+    for (let i = 0; i < 240; i++) {
+      await sleep(5000)
+      try {
+        const row = i % 3 === 0 ? await imageAPI.syncResult(id) : await imageAPI.get(id)
+        const path = row?.local_path || row?.localPath
+        if (row?.status === 'completed' && path) {
+          upsertRecentGeneratedImage(row)
+          openImageViewer('/' + path, '微调结果', context)
+          toast.success('微调图片已生成，可预览后设为当前图')
+          return
+        }
+        if (row?.status === 'failed') {
+          toast.error(row?.error_msg || row?.errorMsg || '微调图片生成失败')
+          return
+        }
+      } catch {}
+    }
+  })()
+}
+
+async function setViewerImageAsCurrent() {
+  const context = imageViewer.value.context
+  const imagePath = normalizeImageViewerPath(imageViewer.value.src)
+  if (!context || !imagePath) return
+  settingCurrentImage.value = true
+  try {
+    const body = {
+      image_path: imagePath,
+      character_id: context.character_id,
+      scene_id: context.scene_id,
+      storyboard_id: context.storyboard_id,
+      frame_type: context.frame_type,
+    }
+    Object.keys(body).forEach((key) => body[key] === undefined && delete body[key])
+    const row = await imageAPI.setCurrent(body)
+    applyLatestGeneratedImage(row, true)
+    toast.success('已设为当前图')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    settingCurrentImage.value = false
+  }
 }
 
 function handleImageViewerKeydown(event) {
+  if (event.key === 'Escape' && refineDialog.value.open) closeRefineDialog()
+  if (event.key === 'Escape' && promptDialog.value.open) closePromptDialog()
   if (event.key === 'Escape' && imageViewer.value.open) closeImageViewer()
 }
 
@@ -1547,8 +2389,24 @@ function framePendingKey(id, frameType) {
   return `${id}:${frameType}`
 }
 
+function isUploadingShotFrame(id, frameType) {
+  return uploadingShotFrameKeys.value.includes(framePendingKey(id, frameType))
+}
+
+function isUploadingModule(key) {
+  return uploadingModuleKeys.value.includes(key)
+}
+
+function setUploadingModule(key, value) {
+  if (value) {
+    if (!uploadingModuleKeys.value.includes(key)) uploadingModuleKeys.value.push(key)
+    return
+  }
+  uploadingModuleKeys.value = uploadingModuleKeys.value.filter(item => item !== key)
+}
+
 function isPendingShotFrame(id, frameType) {
-  return pendingShotFrameKeys.value.includes(framePendingKey(id, frameType))
+  return pendingShotFrameKeys.value.includes(framePendingKey(id, frameType)) || isUploadingShotFrame(id, frameType)
 }
 
 function isPendingVideo(id) {
@@ -1575,12 +2433,19 @@ function isNarratorCharacter(char) {
 const visualChars = computed(() => chars.value.filter(c => !isNarratorCharacter(c)))
 
 const lockedImageConfigId = computed(() => episode.value?.image_config_id || episode.value?.imageConfigId || null)
+const lockedStoryboardImageConfigId = computed(() => episode.value?.storyboard_image_config_id || episode.value?.storyboardImageConfigId || lockedImageConfigId.value)
 const lockedVideoConfigId = computed(() => episode.value?.video_config_id || episode.value?.videoConfigId || null)
 const lockedAudioConfigId = computed(() => episode.value?.audio_config_id || episode.value?.audioConfigId || null)
-const lockedAudioProvider = computed(() => audioConfigs.value.find(c => c.id === lockedAudioConfigId.value)?.provider || '')
+const activeAudioConfig = computed(() => {
+  const active = audioConfigs.value.filter(c => c.is_active !== false && c.isActive !== false)
+  return active.sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))[0] || null
+})
+const effectiveAudioConfig = computed(() => audioConfigs.value.find(c => c.id === lockedAudioConfigId.value) || activeAudioConfig.value)
+const lockedAudioProvider = computed(() => effectiveAudioConfig.value?.provider || '')
 const lockedImageConfigLabel = computed(() => configLabel(imageConfigs.value.find(c => c.id === lockedImageConfigId.value)))
+const lockedStoryboardImageConfigLabel = computed(() => configLabel(imageConfigs.value.find(c => c.id === lockedStoryboardImageConfigId.value)))
 const lockedVideoConfigLabel = computed(() => configLabel(videoConfigs.value.find(c => c.id === lockedVideoConfigId.value)))
-const lockedAudioConfigLabel = computed(() => configLabel(audioConfigs.value.find(c => c.id === lockedAudioConfigId.value)))
+const lockedAudioConfigLabel = computed(() => configLabel(effectiveAudioConfig.value))
 
 // Grid tool state
 const gridDialog = ref(false)
@@ -2053,6 +2918,103 @@ async function loadLatestGridImage() {
   }
 }
 
+function applyLatestGeneratedImage(row, allowRefine = false) {
+  if (!allowRefine && (row?.image_type || row?.imageType) === 'refine') return false
+  const path = row?.local_path || row?.localPath
+  if (!path) return false
+
+  const characterId = row?.character_id || row?.characterId
+  if (characterId) {
+    const char = chars.value.find(c => c.id === characterId)
+    if (!char) return false
+    const changed = (char.image_url || char.imageUrl) !== path
+    char.image_url = path
+    char.imageUrl = path
+    pendingCharImageIds.value = pendingCharImageIds.value.filter(id => id !== characterId)
+    return changed
+  }
+
+  const sceneId = row?.scene_id || row?.sceneId
+  if (sceneId) {
+    const scene = scenes.value.find(s => s.id === sceneId)
+    if (!scene) return false
+    const changed = (scene.image_url || scene.imageUrl) !== path
+    scene.image_url = path
+    scene.imageUrl = path
+    pendingSceneImageIds.value = pendingSceneImageIds.value.filter(id => id !== sceneId)
+    return changed
+  }
+
+  const storyboardId = row?.storyboard_id || row?.storyboardId
+  if (storyboardId) {
+    const sb = sbs.value.find(s => s.id === storyboardId)
+    if (!sb) return false
+    const frameType = row?.frame_type || row?.frameType || 'composed'
+    const current = frameType === 'first_frame'
+      ? getFirstFrame(sb)
+      : frameType === 'last_frame'
+        ? getLastFrame(sb)
+        : getStoryboardCover(sb)
+    const changed = current !== path
+    if (frameType === 'first_frame') {
+      sb.first_frame_image = path
+      sb.firstFrameImage = path
+    } else if (frameType === 'last_frame') {
+      sb.last_frame_image = path
+      sb.lastFrameImage = path
+    } else {
+      sb.composed_image = path
+      sb.composedImage = path
+    }
+    const key = `${storyboardId}:${frameType || 'composed'}`
+    pendingShotFrameKeys.value = pendingShotFrameKeys.value.filter(k => k !== key)
+    return changed
+  }
+
+  return false
+}
+
+async function refreshLatestGeneratedImages(scope = 'all', showToast = true) {
+  try {
+    const rows = await imageAPI.list({ drama_id: dramaId, status: 'completed', limit: 100 })
+    recentGeneratedImages.value = (Array.isArray(rows) ? rows : [])
+      .sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))
+      .map(normalizeGeneratedImage)
+      .filter(Boolean)
+      .filter(item => imageMatchesHistoryScope(item))
+      .slice(0, 20)
+    const latest = new Map()
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const path = row?.local_path || row?.localPath
+      if (row?.status !== 'completed' || !path) continue
+      if ((row?.image_type || row?.imageType) === 'refine') continue
+      const frameType = row?.frame_type || row?.frameType || 'composed'
+      if (String(frameType).startsWith('grid_')) continue
+      const characterId = row?.character_id || row?.characterId
+      const sceneId = row?.scene_id || row?.sceneId
+      const storyboardId = row?.storyboard_id || row?.storyboardId
+      let key = ''
+      if (characterId && (scope === 'all' || scope === 'chars')) key = `char:${characterId}`
+      else if (sceneId && (scope === 'all' || scope === 'scenes')) key = `scene:${sceneId}`
+      else if (storyboardId && (scope === 'all' || scope === 'shots')) key = `shot:${storyboardId}:${frameType}`
+      if (!key) continue
+      const prev = latest.get(key)
+      if (!prev || Number(row.id || 0) > Number(prev.id || 0)) latest.set(key, row)
+    }
+
+    let changed = 0
+    latest.forEach(row => {
+      if (applyLatestGeneratedImage(row)) changed += 1
+    })
+    if (scope === 'all' || scope === 'shots') await loadLatestGridImage()
+    if (showToast) toast.success(changed ? `已刷新 ${changed} 张最新图片` : '当前已经是最新图片')
+    return changed
+  } catch (e) {
+    if (showToast) toast.error(e.message)
+    return 0
+  }
+}
+
 async function doGridSplit() {
   const { rows, cols } = gridActualLayout.value
   try {
@@ -2231,6 +3193,43 @@ const activeSubStepKey = computed(() => {
   return 'export:merge'
 })
 
+const clearingModule = ref(false)
+const clearModuleMap = {
+  'script:raw': { module: 'raw_content', label: '原始内容' },
+  'script:rewrite': { module: 'script', label: 'AI 改写' },
+  'script:extract': { module: 'extract', label: '提取角色与场景' },
+  'script:voice': { module: 'voice', label: '音色分配' },
+  'script:storyboard': { module: 'storyboards', label: '分镜拆解' },
+  'prod:chars': { module: 'character_images', label: '角色形象' },
+  'prod:scenes': { module: 'scene_images', label: '场景图片' },
+  'prod:dubbing': { module: 'tts', label: '配音生成' },
+  'prod:shots': { module: 'shot_images', label: '镜头图片' },
+  'prod:videos': { module: 'videos', label: '视频生成' },
+  'prod:compose': { module: 'compose', label: '视频合成' },
+  'export:merge': { module: 'merge', label: '拼接导出' },
+}
+const activeClearModule = computed(() => clearModuleMap[activeSubStepKey.value] || null)
+
+async function clearActiveModule() {
+  if (!epId.value || !activeClearModule.value || clearingModule.value) return
+  const label = activeClearModule.value.label
+  const ok = window.confirm(`确认清空当前集的“${label}”模块？\n\n只会清空数据库引用和该模块历史记录，不会删除磁盘文件。`)
+  if (!ok) return
+  clearingModule.value = true
+  try {
+    await episodeAPI.clearModule(epId.value, activeClearModule.value.module)
+    toast.success(`已清空${label}`)
+    if (activeClearModule.value.module === 'raw_content') localRaw.value = ''
+    if (activeClearModule.value.module === 'script') localScript.value = ''
+    await refresh()
+    await loadRecentGeneratedImages?.()
+  } catch (e) {
+    toast.error(e.message || '清空失败')
+  } finally {
+    clearingModule.value = false
+  }
+}
+
 const sidebarJumpSteps = computed(() => {
   const section = sidebarSections.value.find((item) => item.items.some(step => step.key === activeSubStepKey.value))
   return section?.items || []
@@ -2408,6 +3407,10 @@ const scriptSteps = computed(() => {
 
 watch(rawContent, v => { localRaw.value = v }, { immediate: true })
 watch(scriptContent, v => { localScript.value = v }, { immediate: true })
+watch(prodTab, (tab) => {
+  loadRecentGeneratedImages()
+  if (tab === 'videos') loadVideoHistories()
+})
 
 async function refresh() {
   try {
@@ -2429,6 +3432,8 @@ async function refresh() {
       else if (epHasScript && chars.value.length) scriptStep.value = 2
       else if (epHasScript || epHasContent) scriptStep.value = 1
       else scriptStep.value = 0
+      await loadRecentGeneratedImages()
+      await loadVideoHistories()
       await loadLatestGridImage()
     }
   } catch (e) {
@@ -2490,8 +3495,34 @@ function watchAsyncResult(check, attempts = 24, delay = 2500) {
 
 async function genCharImg(id) {
   try {
+  const preview = await imageAPI.previewPrompt({
+    type: 'character',
+    character_id: id,
+    episode_id: epId.value,
+    config_id: lockedImageConfigId.value,
+  })
+  await openPromptDialog({
+    title: '角色图片 Prompt',
+    preview,
+    submit: (prompt, dialog) => executeCharImg(id, prompt, dialog),
+  })
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function executeCharImg(id, prompt, dialog = {}) {
+  try {
     if (!isPendingCharImage(id)) pendingCharImageIds.value.push(id)
-    await characterAPI.generateImage(id, epId.value)
+    const char = chars.value.find(c => c.id === id)
+    await imageAPI.generate({
+      character_id: id,
+      drama_id: char?.drama_id || char?.dramaId || dramaId,
+      prompt,
+      prompt_mode: 'custom_final',
+      size: dialog.size || '1024x1024',
+      config_id: lockedImageConfigId.value,
+    })
     toast.success('角色图片生成中')
     await refresh()
     watchAsyncResult(() => {
@@ -2525,8 +3556,34 @@ function batchCharImages() {
 }
 async function genSceneImg(id) {
   try {
+  const preview = await imageAPI.previewPrompt({
+    type: 'scene',
+    scene_id: id,
+    episode_id: epId.value,
+    config_id: lockedImageConfigId.value,
+  })
+  await openPromptDialog({
+    title: '场景图片 Prompt',
+    preview,
+    submit: (prompt, dialog) => executeSceneImg(id, prompt, dialog),
+  })
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function executeSceneImg(id, prompt, dialog = {}) {
+  try {
     if (!isPendingSceneImage(id)) pendingSceneImageIds.value.push(id)
-    await sceneAPI.generateImage(id, epId.value)
+    const scene = scenes.value.find(s => s.id === id)
+    await imageAPI.generate({
+      scene_id: id,
+      drama_id: scene?.drama_id || scene?.dramaId || dramaId,
+      prompt,
+      prompt_mode: 'custom_final',
+      size: dialog.size,
+      config_id: lockedImageConfigId.value,
+    })
     toast.success('场景图片生成中')
     await refresh()
     watchAsyncResult(() => {
@@ -2586,9 +3643,28 @@ function getDialogueSpeaker(sb) {
   if (!speaker) return '旁白'
   return speaker
 }
+function getShotDefaultVoice(sb) {
+  const speaker = getDialogueSpeakerRaw(sb)
+  if (speaker && !/^(旁白|画外音|narrator)$/i.test(speaker)) {
+    const c = chars.value.find(item => item.name === speaker)
+    const voiceId = c?.voice_style || c?.voiceStyle
+    if (voiceId) return voiceId
+  }
+  return voiceProfiles.value[0]?.id || 'Charon'
+}
+function getShotSelectedVoice(sb) {
+  return selectedTTSVoices.value[sb.id] || getShotDefaultVoice(sb)
+}
+function setShotSelectedVoice(sb, voiceId) {
+  selectedTTSVoices.value = { ...selectedTTSVoices.value, [sb.id]: voiceId }
+}
+function getShotVoiceHint(sb) {
+  const profile = getVoiceProfile(getShotSelectedVoice(sb))
+  return profile ? `${profile.label} · ${profile.traits}` : '未匹配到音色详情'
+}
 async function genShotTTS(sb) {
   try {
-    await storyboardAPI.generateTTS(sb.id)
+    await storyboardAPI.generateTTS(sb.id, { voice_id: getShotSelectedVoice(sb) })
     toast.success(`镜头 #${sb.storyboard_number || sb.storyboardNumber || sb.id} 配音已生成`)
     await refresh()
   } catch (e) { toast.error(e.message) }
@@ -2599,7 +3675,7 @@ async function batchShotTTS() {
     toast.info(ttsEligibleCount.value ? '所有镜头配音已生成' : '当前没有可生成的对白或旁白')
     return
   }
-  const results = await Promise.allSettled(pending.map(sb => storyboardAPI.generateTTS(sb.id)))
+  const results = await Promise.allSettled(pending.map(sb => storyboardAPI.generateTTS(sb.id, { voice_id: getShotSelectedVoice(sb) })))
   const okCount = results.filter(r => r.status === 'fulfilled').length
   const failCount = results.length - okCount
   if (okCount) toast.success(`已生成 ${okCount} 条镜头配音`)
@@ -2615,6 +3691,282 @@ function getComposedVideoUrl(s) { return s?.composed_video_url || s?.composedVid
 function hasImg(s) { return !!getStoryboardCover(s) }
 function hasVid(s) { return !!getVideoUrl(s) }
 function hasComposed(s) { return !!getComposedVideoUrl(s) }
+
+function applyUploadedShotFrame(sb, frameType, path) {
+  if (frameType === 'first_frame') {
+    sb.first_frame_image = path
+    sb.firstFrameImage = path
+  } else if (frameType === 'last_frame') {
+    sb.last_frame_image = path
+    sb.lastFrameImage = path
+  } else if (frameType === 'reference') {
+    const refs = getRefs(sb)
+    if (!refs.includes(path)) refs.push(path)
+    sb.reference_images = JSON.stringify(refs)
+    sb.referenceImages = JSON.stringify(refs)
+  } else {
+    sb.composed_image = path
+    sb.composedImage = path
+  }
+}
+
+async function uploadShotFrame(sb, frameType, event) {
+  const input = event?.target
+  const file = input?.files?.[0]
+  if (input) input.value = ''
+  if (!sb?.id || !file) return
+
+  const key = framePendingKey(sb.id, frameType)
+  if (uploadingShotFrameKeys.value.includes(key)) return
+
+  try {
+    uploadingShotFrameKeys.value.push(key)
+    const result = await uploadAPI.storyboardImage({ storyboard_id: sb.id, frame_type: frameType, file })
+    const path = result.path || String(result.url || '').replace(/^\/+/, '')
+    applyUploadedShotFrame(sb, frameType, path)
+    upsertRecentGeneratedImage({
+      ...result,
+      id: result.id,
+      storyboardId: sb.id,
+      storyboard_id: sb.id,
+      dramaId,
+      drama_id: dramaId,
+      frameType,
+      frame_type: frameType,
+      imageType: 'upload',
+      image_type: 'upload',
+      status: 'completed',
+      localPath: path,
+      createdAt: new Date().toISOString(),
+    })
+    toast.success(frameType === 'first_frame' ? '首帧已上传' : (frameType === 'last_frame' ? '尾帧已上传' : '镜头图已上传'))
+  } catch (e) {
+    toast.error(e.message || '上传失败')
+  } finally {
+    uploadingShotFrameKeys.value = uploadingShotFrameKeys.value.filter(item => item !== key)
+  }
+}
+
+function pickUploadFile(event) {
+  const input = event?.target
+  const file = input?.files?.[0] || null
+  return { input, file }
+}
+
+async function uploadEpisodeDocument(field, event) {
+  const { input, file } = pickUploadFile(event)
+  const key = `document:${field}`
+  if (input) input.value = ''
+  if (!file || !epId.value) return
+  try {
+    setUploadingModule(key, true)
+    const result = await uploadAPI.episodeDocument({ episode_id: epId.value, field, file })
+    if (field === 'script_content') {
+      localScript.value = result.text || ''
+      episode.value.script_content = result.text || ''
+      episode.value.scriptContent = result.text || ''
+    } else {
+      localRaw.value = result.text || ''
+      episode.value.content = result.text || ''
+    }
+    toast.success(`已上传文档，提取 ${result.length || 0} 字`)
+  } catch (e) {
+    toast.error(e.message || '文档上传失败')
+  } finally {
+    setUploadingModule(key, false)
+  }
+}
+
+async function uploadModuleImage(targetType, targetId, frameType, event) {
+  const { input, file } = pickUploadFile(event)
+  const key = frameType ? `${targetType}:${targetId}:${frameType}` : `${targetType}:${targetId}`
+  if (input) input.value = ''
+  if (!file) return
+  if (file.size > 20 * 1024 * 1024) {
+    toast.error('图片不能超过 20MB')
+    return
+  }
+
+  try {
+    setUploadingModule(key, true)
+    const result = await uploadAPI.moduleImage({
+      target_type: targetType,
+      target_id: targetId,
+      frame_type: frameType || undefined,
+      file,
+    })
+    const path = result.path || String(result.url || '').replace(/^\/+/, '')
+    applyUploadedModuleImage(targetType, targetId, frameType, path, result)
+    toast.success('图片已上传并设为当前图')
+  } catch (e) {
+    toast.error(e.message || '图片上传失败')
+  } finally {
+    setUploadingModule(key, false)
+  }
+}
+
+function applyUploadedModuleImage(targetType, targetId, frameType, path, result = {}) {
+  if (!path) return
+  if (targetType === 'character') {
+    const target = chars.value.find(item => item.id === targetId)
+    if (target) {
+      target.image_url = path
+      target.imageUrl = path
+      target.local_path = path
+      target.localPath = path
+    }
+    upsertRecentGeneratedImage({
+      ...result,
+      characterId: targetId,
+      character_id: targetId,
+      dramaId,
+      drama_id: dramaId,
+      imageType: 'upload',
+      image_type: 'upload',
+      status: 'completed',
+      localPath: path,
+      createdAt: new Date().toISOString(),
+    })
+    return
+  }
+  if (targetType === 'scene') {
+    const target = scenes.value.find(item => item.id === targetId)
+    if (target) {
+      target.image_url = path
+      target.imageUrl = path
+      target.local_path = path
+      target.localPath = path
+      target.status = 'completed'
+    }
+    upsertRecentGeneratedImage({
+      ...result,
+      sceneId: targetId,
+      scene_id: targetId,
+      dramaId,
+      drama_id: dramaId,
+      imageType: 'upload',
+      image_type: 'upload',
+      status: 'completed',
+      localPath: path,
+      createdAt: new Date().toISOString(),
+    })
+    return
+  }
+  const sb = sbs.value.find(item => item.id === targetId)
+  if (!sb) return
+  applyUploadedShotFrame(sb, frameType || 'composed', path)
+  upsertRecentGeneratedImage({
+    ...result,
+    storyboardId: targetId,
+    storyboard_id: targetId,
+    dramaId,
+    drama_id: dramaId,
+    frameType,
+    frame_type: frameType,
+    imageType: 'upload',
+    image_type: 'upload',
+    status: 'completed',
+    localPath: path,
+    createdAt: new Date().toISOString(),
+  })
+  if (selectedSb.value?.id === targetId) selectedSb.value = sb
+}
+
+function normalizeVideoPath(value) {
+  return String(value || '').trim().replace(/^\/+/, '')
+}
+
+function videoStatusLabel(status) {
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'processing' || status === 'pending') return '生成中'
+  return status || '未知'
+}
+
+function referenceModeLabel(mode) {
+  if (mode === 'single') return '单图'
+  if (mode === 'multiple') return '多图'
+  if (mode === 'first_last') return '首尾帧'
+  return ''
+}
+
+function normalizeGeneratedVideo(row) {
+  if (!row) return null
+  const localPath = row?.local_path || row?.localPath
+  const videoUrl = row?.video_url || row?.videoUrl
+  return {
+    id: row.id,
+    storyboardId: row?.storyboard_id || row?.storyboardId,
+    playUrl: normalizeVideoPath(localPath || videoUrl),
+    status: row?.status || 'pending',
+    statusLabel: videoStatusLabel(row?.status),
+    referenceMode: row?.reference_mode || row?.referenceMode || '',
+    referenceModeLabel: referenceModeLabel(row?.reference_mode || row?.referenceMode),
+    createdAtLabel: formatGenerationTime(row?.created_at || row?.createdAt),
+    errorMsg: row?.error_msg || row?.errorMsg || '',
+    raw: row,
+  }
+}
+
+function getVideoHistory(sb) {
+  return videoHistoryByStoryboard.value[sb.id] || []
+}
+
+function isCurrentVideo(sb, item) {
+  return normalizeVideoPath(getVideoUrl(sb)) === normalizeVideoPath(item?.playUrl)
+}
+
+async function loadVideoHistories() {
+  try {
+    const rows = await videoAPI.list({ drama_id: dramaId, limit: 100 })
+    const normalized = (Array.isArray(rows) ? rows : [])
+      .map(normalizeGeneratedVideo)
+      .filter(Boolean)
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+    const next = {}
+    for (const sb of sbs.value) {
+      const items = videoHistoryScope.value === 'episode'
+        ? normalized
+        : normalized.filter(item => item.storyboardId === sb.id)
+      next[sb.id] = items.slice(0, 8)
+    }
+    videoHistoryByStoryboard.value = next
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+function upsertVideoHistory(row) {
+  const item = normalizeGeneratedVideo(row)
+  if (!item?.storyboardId) return
+  const next = { ...videoHistoryByStoryboard.value }
+  for (const sb of sbs.value) {
+    if (videoHistoryScope.value !== 'episode' && sb.id !== item.storyboardId) continue
+    next[sb.id] = [
+      item,
+      ...(next[sb.id] || []).filter(existing => existing.id !== item.id),
+    ].slice(0, 8)
+  }
+  videoHistoryByStoryboard.value = next
+}
+
+async function setCurrentVideo(sb, item) {
+  if (!item?.id || item.status !== 'completed') return
+  try {
+    if (!settingCurrentVideoIds.value.includes(item.id)) settingCurrentVideoIds.value.push(item.id)
+    const row = await videoAPI.setCurrent({ video_generation_id: item.id, storyboard_id: sb.id })
+    const path = row?.local_path || row?.localPath || row?.video_url || row?.videoUrl || item.playUrl
+    sb.video_url = path
+    sb.videoUrl = path
+    toast.success('已设为当前视频')
+    await refresh()
+    await loadVideoHistories()
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    settingCurrentVideoIds.value = settingCurrentVideoIds.value.filter(id => id !== item.id)
+  }
+}
 
 function getShotReferenceImages(sb) {
   const refs = []
@@ -2670,8 +4022,26 @@ function buildShotImagePrompt(sb, frameType) {
 }
 
 async function genShotFrame(sb, frameType) {
-  const prompt = buildShotImagePrompt(sb, frameType)
-  const referenceImages = getShotReferenceImages(sb)
+  try {
+  const preview = await imageAPI.previewPrompt({
+    type: 'storyboard',
+    storyboard_id: sb.id,
+    drama_id: dramaId,
+    episode_id: epId.value,
+    frame_type: frameType,
+    config_id: lockedStoryboardImageConfigId.value,
+  })
+  await openPromptDialog({
+    title: frameType === 'first_frame' ? '镜头首帧 Prompt' : '镜头尾帧 Prompt',
+    preview,
+    submit: (prompt, dialog) => executeShotFrame(sb, frameType, prompt, dialog.referenceImages, dialog.size),
+  })
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function executeShotFrame(sb, frameType, prompt, referenceImages = [], size = '') {
   const key = framePendingKey(sb.id, frameType)
   try {
     if (!pendingShotFrameKeys.value.includes(key)) pendingShotFrameKeys.value.push(key)
@@ -2679,8 +4049,11 @@ async function genShotFrame(sb, frameType) {
       storyboard_id: sb.id,
       drama_id: dramaId,
       prompt,
+      prompt_mode: 'custom_final',
+      size: size || undefined,
       frame_type: frameType,
       reference_images: referenceImages.length ? referenceImages : undefined,
+      config_id: lockedStoryboardImageConfigId.value,
     }
     await imageAPI.generate(body)
     toast.success(frameType === 'first_frame' ? '首帧生成中' : '尾帧生成中')
@@ -2698,22 +4071,48 @@ async function genShotFrame(sb, frameType) {
 }
 
 async function genVid(sb) {
+  try {
+  const duration = videoDurationForShot(sb)
+  const preview = await videoAPI.previewPrompt({
+    storyboard_id: sb.id,
+    drama_id: dramaId,
+    duration,
+    config_id: lockedVideoConfigId.value,
+  })
+  await openPromptDialog({
+    title: '视频生成 Prompt',
+    preview,
+    kind: 'video',
+    duration,
+    submit: (prompt, dialog) => executeVid(sb, prompt, dialog),
+  })
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+async function executeVid(sb, prompt, dialog) {
+  const duration = Number(dialog.duration || videoDurationForShot(sb))
+  setVideoDurationForShot(sb, duration)
   const params = {
     storyboard_id: sb.id,
     drama_id: dramaId,
-    prompt: sb.video_prompt || sb.videoPrompt || '',
-    duration: Number(sb.duration || 5),
+    prompt,
+    prompt_mode: 'custom_final',
+    duration,
+    config_id: lockedVideoConfigId.value,
   }
-  const first = getFirstFrame(sb)
-  const last = getLastFrame(sb)
-  const refs = getRefs(sb)
+  const first = dialog.firstFrameUrl || dialog.first_frame_url || getFirstFrame(sb)
+  const last = dialog.lastFrameUrl || dialog.last_frame_url || getLastFrame(sb)
+  const refs = dialog.referenceImages || []
   if (first && last) { Object.assign(params, { reference_mode: 'first_last', first_frame_url: first, last_frame_url: last }) }
-  else if (refs.length) { Object.assign(params, { reference_mode: 'multiple', reference_image_urls: [first, ...refs].filter(Boolean) }) }
+  else if (refs.length) { Object.assign(params, { reference_mode: 'multiple', reference_image_urls: refs }) }
   else if (first) { Object.assign(params, { reference_mode: 'single', image_url: first }) }
   try {
     delete failedVideoMessages.value[sb.id]
     if (!isPendingVideo(sb.id)) pendingVideoIds.value.push(sb.id)
     const generation = await videoAPI.generate(params)
+    upsertVideoHistory(generation)
     toast.success('视频生成中')
     await refresh()
     pollVideoGeneration(generation?.id, sb.id)
@@ -2736,6 +4135,7 @@ async function pollVideoGeneration(generationId, storyboardId) {
     await sleep(4000)
     try {
       const res = await videoAPI.get(generationId)
+      upsertVideoHistory(res)
       await refresh()
       if (res?.status === 'completed') {
         pendingVideoIds.value = pendingVideoIds.value.filter(item => item !== storyboardId)
@@ -2794,6 +4194,19 @@ function batchVideos() {
     }), 80, 4000)
   }
 }
+async function exportGeneratedVideos() {
+  if (!epId.value) return
+  try {
+    exportingGeneratedVideos.value = true
+    const result = await episodeAPI.saveGeneratedVideos(epId.value)
+    toast.success(`\u5df2\u5bfc\u51fa ${result.exported}/${result.total} \u4e2a\u89c6\u9891\u5230\uff1a${result.path}`)
+  } catch (e) {
+    toast.error(e.message || '\u5bfc\u51fa\u5931\u8d25')
+  } finally {
+    exportingGeneratedVideos.value = false
+  }
+}
+
 async function batchCompose() {
   await composeAPI.all(epId.value)
   pendingComposeIds.value = [...new Set(sbs.value.filter(sb => !!sb.video_url || !!sb.videoUrl).map(sb => sb.id))]
@@ -2859,9 +4272,9 @@ async function loadConfigs() {
 
 function inferVoiceGender(name, desc = []) {
   const text = `${name} ${Array.isArray(desc) ? desc.join(' ') : ''}`
-  if (/[男|青年|大爷|学长|boy|man|male]/i.test(text)) return '男声'
-  if (/[女|少女|御姐|奶奶|girl|woman|female]/i.test(text)) return '女声'
-  return '中性'
+  if (/(boy|man|male)/i.test(text)) return 'Male'
+  if (/(girl|woman|female)/i.test(text)) return 'Female'
+  return 'Neutral'
 }
 
 function mapVoiceProfile(v) {
@@ -2870,14 +4283,14 @@ function mapVoiceProfile(v) {
     id: v.voice_id,
     label: v.voice_name || v.voice_id,
     gender: inferVoiceGender(v.voice_name || v.voice_id, desc),
-    traits: desc.length ? desc.slice(0, 2).join('、') : `${v.language || '多语言'}音色`,
-    suitable: desc.length > 2 ? desc.slice(2).join('、') : `${v.language || '通用'}角色`,
+    traits: desc.length ? desc.slice(0, 2).join(' / ') : `${v.language || 'Multilingual'} voice`,
+    suitable: desc.length > 2 ? desc.slice(2).join(' / ') : `${v.language || 'General'} role`,
   }
 }
 
 async function loadVoices() {
   try {
-    const provider = lockedAudioProvider.value || 'minimax'
+    const provider = lockedAudioProvider.value || 'gemini'
     const rows = await voicesAPI.list(provider)
     voiceProfiles.value = rows?.length ? rows.map(mapVoiceProfile) : fallbackVoiceProfiles
   } catch (e) {
@@ -2886,8 +4299,133 @@ async function loadVoices() {
   }
 }
 
-watch([lockedAudioConfigId, audioConfigs], () => { loadVoices() }, { deep: true })
-onMounted(() => { refresh(); loadConfigs(); loadVoices() })
+watch([lockedAudioConfigId, audioConfigs], () => { loadVoices() }, { deep: true });
+
+function handleTaskEvent(data) {
+  if (!data?.type) return
+  if (data.type === 'image') {
+    if (data.status === 'failed') {
+      if (data.characterId) pendingCharImageIds.value = pendingCharImageIds.value.filter(id => id !== data.characterId)
+      if (data.sceneId) pendingSceneImageIds.value = pendingSceneImageIds.value.filter(id => id !== data.sceneId)
+      if (data.storyboardId) pendingShotFrameKeys.value = pendingShotFrameKeys.value.filter(k => !k.startsWith(`${data.storyboardId}:`))
+      if (data.errorMsg) toast.error(data.errorMsg)
+      return
+    }
+    if (String(data.frameType || '').startsWith('grid_')) {
+      loadLatestGridImage()
+      return
+    }
+    if ((data.imageType || data.image_type) === 'refine') {
+      if (data.localPath) {
+        upsertRecentGeneratedImage({
+          ...data,
+          id: data.id,
+          status: 'completed',
+          localPath: data.localPath,
+          imageType: data.imageType || data.image_type || 'refine',
+          createdAt: new Date().toISOString(),
+        })
+        openImageViewer('/' + data.localPath, '微调结果', imageContextFromTask(data))
+        toast.success('微调图片已生成，可预览后设为当前图')
+      }
+      return
+    }
+    upsertRecentGeneratedImage({
+      ...data,
+      id: data.id,
+      status: 'completed',
+      localPath: data.localPath,
+      createdAt: new Date().toISOString(),
+    })
+    applyLatestGeneratedImage(data)
+    return
+  }
+
+  if (data.type === 'video') {
+    if (!data.storyboardId) return
+    pendingVideoIds.value = pendingVideoIds.value.filter(id => id !== data.storyboardId)
+    upsertVideoHistory({
+      ...data,
+      storyboardId: data.storyboardId,
+      status: data.status,
+      localPath: data.localPath || data.videoUrl,
+      videoUrl: data.videoUrl,
+      errorMsg: data.errorMsg,
+      createdAt: new Date().toISOString(),
+    })
+    const sb = sbs.value.find(item => item.id === data.storyboardId)
+    if (data.status === 'completed') {
+      if (sb && (data.localPath || data.videoUrl)) {
+        sb.video_url = data.localPath || data.videoUrl
+        sb.videoUrl = data.localPath || data.videoUrl
+      }
+      delete failedVideoMessages.value[data.storyboardId]
+    } else {
+      failedVideoMessages.value = { ...failedVideoMessages.value, [data.storyboardId]: data.errorMsg || '视频生成失败' }
+      toast.error(failedVideoMessages.value[data.storyboardId])
+    }
+    return
+  }
+
+  if (data.type === 'tts') {
+    if (!data.storyboardId) return
+    const sb = sbs.value.find(item => item.id === data.storyboardId)
+    if (data.status === 'completed' && sb && (data.localPath || data.ttsAudioUrl)) {
+      sb.tts_audio_url = data.localPath || data.ttsAudioUrl
+      sb.ttsAudioUrl = data.localPath || data.ttsAudioUrl
+    } else if (data.status === 'failed') {
+      toast.error(data.errorMsg || '配音生成失败')
+    }
+    return
+  }
+
+  if (data.type === 'compose') {
+    if (!data.storyboardId) return
+    pendingComposeIds.value = pendingComposeIds.value.filter(id => id !== data.storyboardId)
+    const sb = sbs.value.find(item => item.id === data.storyboardId)
+    if (data.status === 'completed') {
+      if (sb && (data.localPath || data.composedVideoUrl)) {
+        sb.composed_video_url = data.localPath || data.composedVideoUrl
+        sb.composedVideoUrl = data.localPath || data.composedVideoUrl
+        sb.status = 'compose_completed'
+      }
+      delete failedComposeMessages.value[data.storyboardId]
+    } else {
+      if (sb) sb.status = 'compose_failed'
+      failedComposeMessages.value = { ...failedComposeMessages.value, [data.storyboardId]: data.errorMsg || '视频合成失败' }
+      toast.error(failedComposeMessages.value[data.storyboardId])
+    }
+    return
+  }
+
+  if (data.type === 'merge') {
+    if (data.status === 'completed') {
+      mergeData.value = { ...(mergeData.value || {}), id: data.id, status: 'completed', merged_url: data.localPath || data.mergedUrl, mergedUrl: data.localPath || data.mergedUrl }
+      toast.success('拼接完成')
+    } else {
+      mergeData.value = { ...(mergeData.value || {}), id: data.id, status: 'failed', error_msg: data.errorMsg }
+      toast.error(data.errorMsg || '拼接失败')
+    }
+  }
+}
+
+let taskEventSource = null
+onMounted(() => {
+  refresh()
+  loadConfigs()
+  loadVoices()
+  loadRecentGeneratedImages()
+
+  // SSE 图片自动刷新
+  taskEventSource = new EventSource(`/api/v1/events/tasks?drama_id=${dramaId}`)
+  taskEventSource.addEventListener('task', (e) => {
+    handleTaskEvent(JSON.parse(e.data))
+  })
+})
+
+onUnmounted(() => {
+  taskEventSource?.close()
+})
 </script>
 
 <style scoped>
@@ -3038,6 +4576,78 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 .studio-actions {
   display: flex;
   gap: 6px;
+}
+
+/* Config Switch Panel */
+.config-switch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 23, 38, 0.15);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+.config-switch-panel {
+  width: min(760px, calc(100vw - 48px));
+  padding: 22px 24px;
+  animation: fadeUp 0.2s var(--ease-out) both;
+}
+.config-switch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.config-switch-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+.config-switch-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+.config-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.config-switch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+}
+.config-switch-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.config-switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+.config-switch-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.config-switch-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }
 .studio-topbar .btn {
   height: 28px;
@@ -3208,6 +4818,26 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
   background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.52));
   overflow-x: auto;
   flex-shrink: 0;
+}
+.stage-subnav-items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.stage-clear-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.btn-danger-soft {
+  border-color: rgba(190, 55, 55, 0.18);
+  background: rgba(190, 55, 55, 0.08);
+  color: #9f2f2f;
+}
+.btn-danger-soft:hover {
+  background: rgba(190, 55, 55, 0.13);
+  color: #842525;
 }
 .stage-subnav-item {
   display: inline-flex;
@@ -3610,6 +5240,179 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 /* Production content */
 .prod-content { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
 .prod-section-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.recent-images-panel {
+  margin: 10px 16px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(27, 41, 64, 0.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.62);
+  flex-shrink: 0;
+}
+.recent-images-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.recent-images-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+.recent-images-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.recent-images-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.recent-image-item {
+  width: 190px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.78);
+  text-align: left;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.recent-image-item:hover {
+  border-color: rgba(19, 51, 121, 0.18);
+  box-shadow: 0 8px 18px rgba(20, 32, 54, 0.08);
+  transform: translateY(-1px);
+}
+.recent-image-thumb {
+  width: 54px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.recent-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.recent-image-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.recent-image-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.recent-image-tags .tag {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-image-meta {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.scope-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.7);
+}
+.scope-toggle-btn {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.scope-toggle-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+.video-history-list {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 12px;
+}
+.video-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.video-history-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.video-history-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.72);
+}
+.video-history-item.active {
+  border-color: rgba(31, 132, 84, 0.45);
+  background: rgba(31, 132, 84, 0.08);
+}
+.video-history-item.failed {
+  border-color: rgba(203, 64, 64, 0.38);
+}
+.video-history-thumb {
+  width: 92px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #000;
+  object-fit: cover;
+}
+.video-history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.video-history-copy { min-width: 0; }
+.video-history-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.video-history-meta {
+  color: var(--text-3);
+  font-size: 11px;
+}
 
 .dub-grid { display: flex; flex-direction: column; gap: 10px; }
 .dub-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-radius: 20px; background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(248,251,255,0.58)); }
@@ -3618,6 +5421,7 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 .dub-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dub-desc { font-size: 13px; line-height: 1.6; color: var(--text-1); }
 .dub-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.dub-voice-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .dub-foot { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid rgba(27, 41, 64, 0.08); }
 .dub-audio { flex: 1; min-width: 0; height: 30px; }
 
@@ -3633,6 +5437,20 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 .asset-cover img { width: 100%; height: 100%; object-fit: cover; }
 .previewable-image { cursor: zoom-in; transition: transform 0.18s var(--ease-out), filter 0.18s var(--ease-out); }
 .previewable-image:hover { transform: scale(1.015); filter: saturate(1.04); }
+
+.module-upload-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.module-upload-btn input {
+  display: none;
+}
+
+.module-upload-btn.disabled {
+  pointer-events: none;
+  opacity: 0.6;
+}
 .asset-cover-badge {
   position: absolute;
   top: 8px;
@@ -3695,6 +5513,34 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 .frame-thumbs { display: flex; gap: 8px; flex-shrink: 0; }
 .frame-thumb-wrap { display: flex; flex-direction: column; gap: 3px; align-items: center; }
 .frame-thumb-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.frame-upload-mini,
+.frame-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.78);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.frame-upload-mini:hover,
+.frame-upload-btn:hover {
+  background: #fff;
+  color: var(--text-0);
+}
+.frame-upload-mini input,
+.frame-upload-btn input {
+  display: none;
+}
+.frame-upload-btn {
+  margin-top: 7px;
+  width: 100%;
+}
 .frame-thumb {
   position: relative; width: 130px; aspect-ratio: 16/9;
   border-radius: 6px; overflow: hidden;
@@ -3780,6 +5626,14 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
   font-weight: 700;
   color: var(--text-1);
   font-family: var(--font-display);
+  min-width: 0;
+  flex: 1;
+}
+.image-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .image-viewer-body {
   display: flex;
@@ -3796,6 +5650,182 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
   border-radius: 18px;
   box-shadow: 0 18px 48px rgba(8, 14, 24, 0.22);
   background: rgba(255,255,255,0.9);
+}
+
+/* Prompt preview */
+.prompt-preview-overlay {
+  z-index: 130;
+  padding: 28px;
+  background: rgba(18, 24, 34, 0.54);
+  backdrop-filter: blur(10px);
+}
+.prompt-preview-card {
+  width: min(980px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(248,251,255,0.94));
+}
+.prompt-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(27, 41, 64, 0.08);
+}
+.prompt-preview-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-0);
+  font-family: var(--font-display);
+}
+.prompt-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.prompt-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.prompt-preview-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.prompt-preview-textarea {
+  width: 100%;
+  min-height: 280px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.82);
+  color: var(--text-0);
+  font-size: 13px;
+  line-height: 1.65;
+  outline: none;
+}
+.prompt-preview-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.prompt-preview-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.prompt-preview-refs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prompt-ref-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.prompt-ref-thumb {
+  width: 76px;
+  height: 54px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-2);
+  cursor: zoom-in;
+}
+.prompt-ref-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.prompt-preview-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(27, 41, 64, 0.08);
+}
+
+.refine-dialog-overlay {
+  z-index: 135;
+  padding: 28px;
+  background: rgba(18, 24, 34, 0.58);
+  backdrop-filter: blur(10px);
+}
+.refine-dialog-card {
+  width: min(1120px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(248,251,255,0.94));
+}
+.refine-dialog-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(360px, 1.14fr);
+  gap: 14px;
+  overflow: auto;
+  padding: 16px 18px;
+}
+.refine-source-pane {
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.72);
+  padding: 10px;
+}
+.refine-source-img {
+  max-width: 100%;
+  max-height: min(58vh, 620px);
+  object-fit: contain;
+  border-radius: 10px;
+}
+.refine-form-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.refine-instruction {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.82);
+  color: var(--text-0);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+}
+.refine-instruction:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.refine-prompt-textarea {
+  min-height: 240px;
 }
 
 /* Grid tool dialog */

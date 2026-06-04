@@ -168,12 +168,43 @@ const DEFAULT_PROMPTS: Record<string, { name: string; instructions: string }> = 
 
 export const validAgentTypes = Object.keys(DEFAULT_PROMPTS)
 
-function getAgentConfig(agentType: string) {
+function getLegacyAgentConfig(agentType: string) {
   const rows = db.select().from(schema.agentConfigs)
     .where(and(eq(schema.agentConfigs.agentType, agentType), isNull(schema.agentConfigs.deletedAt)))
     .all()
   // Return active one, or first one
   return rows.find(r => r.isActive) || rows[0] || null
+}
+
+function getDefaultPresetId() {
+  const [preset] = db.select().from(schema.agentPresets)
+    .where(and(eq(schema.agentPresets.isDefault, true), isNull(schema.agentPresets.deletedAt)))
+    .all()
+  return preset?.id || null
+}
+
+function getDramaPresetId(dramaId: number) {
+  const [drama] = db.select().from(schema.dramas)
+    .where(eq(schema.dramas.id, dramaId))
+    .all()
+  return drama?.agentPresetId || null
+}
+
+function getPresetAgentConfig(agentType: string, dramaId: number) {
+  const presetId = getDramaPresetId(dramaId) || getDefaultPresetId()
+  if (!presetId) return null
+
+  const [config] = db.select().from(schema.agentPresetConfigs)
+    .where(and(
+      eq(schema.agentPresetConfigs.presetId, presetId),
+      eq(schema.agentPresetConfigs.agentType, agentType),
+    ))
+    .all()
+  return config || null
+}
+
+function getAgentConfig(agentType: string, dramaId: number) {
+  return getPresetAgentConfig(agentType, dramaId) || getLegacyAgentConfig(agentType)
 }
 
 function getModel(dbConfig: any) {
@@ -196,7 +227,7 @@ export function createAgent(type: string, episodeId: number, dramaId: number): A
   const defaults = DEFAULT_PROMPTS[type]
   if (!defaults) return null
 
-  const dbConfig = getAgentConfig(type)
+  const dbConfig = getAgentConfig(type, dramaId)
   const model = getModel(dbConfig)
   const baseInstructions = dbConfig?.systemPrompt?.trim() || defaults.instructions
   const skillInstructions = loadAgentSkills(type)
@@ -216,4 +247,13 @@ export function createAgent(type: string, episodeId: number, dramaId: number): A
   }
 
   return new Agent({ id: type, name, instructions, model, tools })
+}
+
+export function getAgentGenerateOptions(type: string, dramaId: number) {
+  const config = getAgentConfig(type, dramaId)
+  const maxSteps = Number(config?.maxIterations || 20)
+  const options: Record<string, any> = { maxSteps }
+  if (config?.temperature !== null && config?.temperature !== undefined) options.temperature = config.temperature
+  if (config?.maxTokens) options.maxTokens = config.maxTokens
+  return options
 }

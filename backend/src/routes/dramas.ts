@@ -1,19 +1,31 @@
-import { Hono } from 'hono'
-import { eq, isNull, like, desc } from 'drizzle-orm'
+﻿import { Hono } from 'hono'
+import { and, eq, isNull, desc } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
-import { success, badRequest, notFound, created, now } from '../utils/response.js'
+import { success, notFound, created, now, forbidden } from '../utils/response.js'
 import { toSnakeCase, toSnakeCaseArray } from '../utils/transform.js'
+import { getCurrentUser } from '../middleware/auth.js'
 
 const app = new Hono()
 
+function getDefaultAgentPresetId() {
+  const [preset] = db.select().from(schema.agentPresets)
+    .where(and(eq(schema.agentPresets.isDefault, true), isNull(schema.agentPresets.deletedAt)))
+    .all()
+  return preset?.id || null
+}
+
 // GET /dramas - List dramas
 app.get('/', async (c) => {
+  const user = getCurrentUser(c)
   const page = Number(c.req.query('page') || 1)
   const pageSize = Number(c.req.query('page_size') || 20)
   const status = c.req.query('status')
   const keyword = c.req.query('keyword')
 
-  let query = db.select().from(schema.dramas).where(isNull(schema.dramas.deletedAt))
+  const where = user?.role === 'admin'
+    ? isNull(schema.dramas.deletedAt)
+    : and(isNull(schema.dramas.deletedAt), eq(schema.dramas.userId, user!.id))
+  let query = db.select().from(schema.dramas).where(where)
 
   const allRows = await query.orderBy(desc(schema.dramas.updatedAt))
   let filtered = allRows
@@ -50,15 +62,20 @@ app.get('/', async (c) => {
 
 // POST /dramas - Create drama
 app.post('/', async (c) => {
+  const user = getCurrentUser(c)
   const body = await c.req.json()
   const ts = now()
   const res = db.insert(schema.dramas).values({
+    userId: user!.id,
     title: body.title,
     description: body.description,
     genre: body.genre,
     style: body.style,
+    stylePrompt: body.style_prompt || null,
+    agentPresetId: body.agent_preset_id || getDefaultAgentPresetId(),
     tags: body.tags ? JSON.stringify(body.tags) : null,
     metadata: body.metadata,
+    aspectRatio: body.aspect_ratio || '16:9',
     status: 'draft',
     createdAt: ts,
     updatedAt: ts,
@@ -86,7 +103,11 @@ app.post('/', async (c) => {
 
 // GET /dramas/stats — must be before /:id
 app.get('/stats', async (c) => {
-  const all = db.select().from(schema.dramas).where(isNull(schema.dramas.deletedAt)).all()
+  const user = getCurrentUser(c)
+  const where = user?.role === 'admin'
+    ? isNull(schema.dramas.deletedAt)
+    : and(isNull(schema.dramas.deletedAt), eq(schema.dramas.userId, user!.id))
+  const all = db.select().from(schema.dramas).where(where).all()
   const byStatus = Object.entries(
     all.reduce((acc, d) => {
       acc[d.status || 'draft'] = (acc[d.status || 'draft'] || 0) + 1
@@ -98,9 +119,12 @@ app.get('/stats', async (c) => {
 
 // GET /dramas/:id - Get drama detail
 app.get('/:id', async (c) => {
+  const user = getCurrentUser(c)
   const id = Number(c.req.param('id'))
   const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, id))
   if (!drama) return notFound(c, '剧本不存在')
+
+  if (user?.role !== 'admin' && drama.userId !== user?.id) return forbidden(c)
 
   const eps = await db.select().from(schema.episodes)
     .where(eq(schema.episodes.dramaId, id))
@@ -123,30 +147,45 @@ app.get('/:id', async (c) => {
 
 // PUT /dramas/:id - Update drama
 app.put('/:id', async (c) => {
+  const user = getCurrentUser(c)
   const id = Number(c.req.param('id'))
+  const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, id))
+  if (!drama) return notFound(c)
+  if (user?.role !== 'admin' && drama.userId !== user?.id) return forbidden(c)
   const body = await c.req.json()
   const updates: Record<string, any> = { updatedAt: now() }
   if (body.title !== undefined) updates.title = body.title
   if (body.description !== undefined) updates.description = body.description
   if (body.genre !== undefined) updates.genre = body.genre
   if (body.style !== undefined) updates.style = body.style
+  if (body.style_prompt !== undefined) updates.stylePrompt = body.style_prompt
   if (body.status !== undefined) updates.status = body.status
   if (body.tags !== undefined) updates.tags = JSON.stringify(body.tags)
   if (body.metadata !== undefined) updates.metadata = body.metadata
+  if (body.aspect_ratio !== undefined) updates.aspectRatio = body.aspect_ratio
+  if (body.agent_preset_id !== undefined) updates.agentPresetId = body.agent_preset_id || null
   db.update(schema.dramas).set(updates).where(eq(schema.dramas.id, id)).run()
   return success(c)
 })
 
 // DELETE /dramas/:id - Soft delete
 app.delete('/:id', async (c) => {
+  const user = getCurrentUser(c)
   const id = Number(c.req.param('id'))
+  const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, id))
+  if (!drama) return notFound(c)
+  if (user?.role !== 'admin' && drama.userId !== user?.id) return forbidden(c)
   await db.update(schema.dramas).set({ deletedAt: now() }).where(eq(schema.dramas.id, id))
   return success(c)
 })
 
 // PUT /dramas/:id/characters - Save characters
 app.put('/:id/characters', async (c) => {
+  const user = getCurrentUser(c)
   const dramaId = Number(c.req.param('id'))
+  const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, dramaId))
+  if (!drama) return notFound(c)
+  if (user?.role !== 'admin' && drama.userId !== user?.id) return forbidden(c)
   const body = await c.req.json()
   const chars = body.characters || []
   const ts = now()
@@ -163,7 +202,11 @@ app.put('/:id/characters', async (c) => {
 
 // PUT /dramas/:id/episodes - Save episodes
 app.put('/:id/episodes', async (c) => {
+  const user = getCurrentUser(c)
   const dramaId = Number(c.req.param('id'))
+  const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, dramaId))
+  if (!drama) return notFound(c)
+  if (user?.role !== 'admin' && drama.userId !== user?.id) return forbidden(c)
   const body = await c.req.json()
   const episodes = body.episodes || []
   const ts = now()
