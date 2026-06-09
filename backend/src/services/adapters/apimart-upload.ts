@@ -41,14 +41,19 @@ export async function normalizeApimartReferenceImage(config: AIConfig, value: st
   form.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), filename)
 
   const url = joinProviderUrl(config.baseUrl || DEFAULT_BASE_URL, '/v1', '/uploads/images')
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      Accept: 'application/json',
-    },
-    body: form,
-  })
+  let resp: Response
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        Accept: 'application/json',
+      },
+      body: form,
+    })
+  } catch (err: any) {
+    throw new Error(formatApimartUploadFetchError(err, url))
+  }
   const text = await resp.text()
   if (!resp.ok) throw new Error(`APIMart image upload failed ${resp.status}: ${text}`)
 
@@ -65,6 +70,24 @@ export async function normalizeApimartReferenceImage(config: AIConfig, value: st
   cache[cacheKey] = { url: uploadedUrl, expiresAt: Date.now() + CACHE_TTL_MS }
   writeUploadCache(cache)
   return uploadedUrl
+}
+
+function formatApimartUploadFetchError(err: any, url: string) {
+  const cause = err?.cause
+  const detail = [
+    err?.message || String(err || ''),
+    cause?.name,
+    cause?.code,
+    cause?.message,
+  ].filter(Boolean).join(' | ')
+  if (
+    detail.includes('UND_ERR_CONNECT_TIMEOUT')
+    || detail.includes('Connect Timeout Error')
+    || detail.includes('api.apimart.ai:443')
+  ) {
+    return `APIMart 参考图上传网络连接超时：Node 后端连接 api.apimart.ai:443 超时。请检查后端启动环境的 HTTPS_PROXY/HTTP_PROXY，或更换网络后重试。url=${url} | ${detail}`
+  }
+  return `APIMart 参考图上传请求失败：url=${url} | ${detail}`
 }
 
 function readReferenceImage(value: string): { buffer: Buffer; mimeType: string; filename: string } {

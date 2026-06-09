@@ -373,7 +373,7 @@ async function executeAction(c: any, action: AssistantAction) {
       storyboardId: sb.id,
       dramaId: episode.dramaId,
       prompt,
-      duration: Number(payload.duration || sb.duration || 5),
+      duration: Number(payload.duration || sb.duration || 10),
       configId: episode.videoConfigId ?? undefined,
     }
     if (sb.firstFrameImage && sb.lastFrameImage) {

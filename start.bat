@@ -1,7 +1,7 @@
 @echo off
 cd /d G:\anime\huobao\backend
 echo [1/2] Starting backend on port 5679...
-start "HuobaoBackend" cmd /k "npm run dev"
+start "HuobaoBackend" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command ". 'G:\anime\huobao\scripts\use-system-proxy.ps1'; Set-Location 'G:\anime\huobao\backend'; npm run dev"
 
 timeout /t 2 /nobreak
 

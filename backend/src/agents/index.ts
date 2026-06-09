@@ -178,7 +178,11 @@ function getLegacyAgentConfig(agentType: string) {
 
 function getDefaultPresetId() {
   const [preset] = db.select().from(schema.agentPresets)
-    .where(and(eq(schema.agentPresets.isDefault, true), isNull(schema.agentPresets.deletedAt)))
+    .where(and(
+      eq(schema.agentPresets.isDefault, true),
+      eq(schema.agentPresets.isActive, true),
+      isNull(schema.agentPresets.deletedAt),
+    ))
     .all()
   return preset?.id || null
 }
@@ -194,13 +198,22 @@ function getPresetAgentConfig(agentType: string, dramaId: number) {
   const presetId = getDramaPresetId(dramaId) || getDefaultPresetId()
   if (!presetId) return null
 
+  const [preset] = db.select().from(schema.agentPresets)
+    .where(and(
+      eq(schema.agentPresets.id, presetId),
+      eq(schema.agentPresets.isActive, true),
+      isNull(schema.agentPresets.deletedAt),
+    ))
+    .all()
+  if (!preset) return null
+
   const [config] = db.select().from(schema.agentPresetConfigs)
     .where(and(
       eq(schema.agentPresetConfigs.presetId, presetId),
       eq(schema.agentPresetConfigs.agentType, agentType),
     ))
     .all()
-  return config || null
+  return config ? { ...config, preset } : null
 }
 
 function getAgentConfig(agentType: string, dramaId: number) {
@@ -227,14 +240,29 @@ export function createAgent(type: string, episodeId: number, dramaId: number): A
   const defaults = DEFAULT_PROMPTS[type]
   if (!defaults) return null
 
-  const dbConfig = getAgentConfig(type, dramaId)
+  const dbConfig: any = getAgentConfig(type, dramaId)
   const model = getModel(dbConfig)
   const baseInstructions = dbConfig?.systemPrompt?.trim() || defaults.instructions
   const skillInstructions = loadAgentSkills(type)
+  const presetPriority = [
+    '## 当前 Agent 预设优先级',
+    `当前项目使用的 Agent 预设：${dbConfig?.preset?.name || '默认/兼容配置'}`,
+    '当下面的项目技能规范与当前 Agent 预设在题材、风格、结构或输出倾向上冲突时，必须优先遵守当前 Agent 预设。',
+    '项目技能规范只作为工具调用、字段完整性和质量检查的通用约束。',
+  ].join('\n')
   const instructions = skillInstructions
-    ? [baseInstructions, '', skillInstructions].join('\n')
-    : baseInstructions
+    ? [skillInstructions, '', presetPriority, '', baseInstructions].join('\n')
+    : [presetPriority, '', baseInstructions].join('\n')
   const name = dbConfig?.name || defaults.name
+  logTaskProgress('AgentConfig', 'resolved-agent-preset', {
+    agentType: type,
+    dramaId,
+    presetId: dbConfig?.preset?.id || null,
+    presetName: dbConfig?.preset?.name || null,
+    configId: dbConfig?.id || null,
+    model: dbConfig?.model || null,
+    hasSystemPrompt: !!dbConfig?.systemPrompt?.trim(),
+  })
 
   let tools: Record<string, any> = {}
   switch (type) {
@@ -250,10 +278,31 @@ export function createAgent(type: string, episodeId: number, dramaId: number): A
 }
 
 export function getAgentGenerateOptions(type: string, dramaId: number) {
-  const config = getAgentConfig(type, dramaId)
+  const config: any = getAgentConfig(type, dramaId)
   const maxSteps = Number(config?.maxIterations || 20)
   const options: Record<string, any> = { maxSteps }
   if (config?.temperature !== null && config?.temperature !== undefined) options.temperature = config.temperature
   if (config?.maxTokens) options.maxTokens = config.maxTokens
   return options
+}
+
+export function getResolvedAgentConfigDebug(type: string, dramaId: number) {
+  const defaults = DEFAULT_PROMPTS[type]
+  if (!defaults) return null
+  const config: any = getAgentConfig(type, dramaId)
+  return {
+    agent_type: type,
+    drama_id: dramaId,
+    preset_id: config?.preset?.id || null,
+    preset_key: config?.preset?.key || null,
+    preset_name: config?.preset?.name || null,
+    config_id: config?.id || null,
+    agent_name: config?.name || defaults.name,
+    model: config?.model || null,
+    temperature: config?.temperature ?? null,
+    max_tokens: config?.maxTokens ?? null,
+    max_iterations: config?.maxIterations ?? null,
+    system_prompt_preview: (config?.systemPrompt?.trim() || defaults.instructions).slice(0, 300),
+    uses_legacy_agent_config: !config?.preset,
+  }
 }

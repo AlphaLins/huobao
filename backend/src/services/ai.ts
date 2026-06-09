@@ -15,6 +15,22 @@ export interface AIConfig {
   model: string
 }
 
+export function compareActiveConfigs(
+  a: typeof schema.aiServiceConfigs.$inferSelect,
+  b: typeof schema.aiServiceConfigs.$inferSelect,
+) {
+  const defaultDiff = Number(b.isDefault || false) - Number(a.isDefault || false)
+  if (defaultDiff) return defaultDiff
+
+  const priorityDiff = (b.priority || 0) - (a.priority || 0)
+  if (priorityDiff) return priorityDiff
+
+  const updatedDiff = Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || '')
+  if (updatedDiff) return updatedDiff
+
+  return (b.id || 0) - (a.id || 0)
+}
+
 export function getTextProviderBaseUrl(config: AIConfig) {
   const provider = config.provider.toLowerCase()
 
@@ -38,7 +54,7 @@ export function getActiveConfig(serviceType: ServiceType): AIConfig | null {
     .where(eq(schema.aiServiceConfigs.serviceType, serviceType))
     .all()
     .filter(r => r.isActive)
-    .sort((a, b) => (b.priority || 0) - (a.priority || 0)) // 高优先级优先
+    .sort(compareActiveConfigs)
 
   const active = rows[0]
   if (!active) {

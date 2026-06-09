@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backend = Join-Path $root "backend"
 
+. (Join-Path $PSScriptRoot "use-system-proxy.ps1")
+
 $env:PORT = "$Port"
 $env:HOST = $HostName
 

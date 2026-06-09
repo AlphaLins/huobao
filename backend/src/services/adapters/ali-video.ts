@@ -30,7 +30,7 @@ export class AliVideoAdapter implements VideoProviderAdapter {
       },
       parameters: {
         resolution: this.normalizeResolution(record.aspectRatio ?? '16:9'),
-        duration: record.duration || 5,
+        duration: record.duration || 10,
         watermark: false,
         seed: Math.floor(Math.random() * 2147483647),
       },

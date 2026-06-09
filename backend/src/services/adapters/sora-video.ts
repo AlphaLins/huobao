@@ -204,10 +204,8 @@ export class SoraVideoAdapter implements VideoProviderAdapter {
   }
 
   private normalizeDuration(duration?: number | null) {
-    const value = Number(duration || 10)
-    if (value <= 4) return 4
-    if (value <= 8) return 8
-    return 12
+    const value = Math.round(Number(duration || 10))
+    return Number.isFinite(value) && value > 0 ? value : 10
   }
 
   private sizeFromModel(model?: string | null) {

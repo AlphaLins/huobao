@@ -1396,12 +1396,15 @@
                   <div v-if="videoFailMessage(sb.id)" class="prod-error">{{ videoFailMessage(sb.id) }}</div>
                 </div>
                 <div class="prod-actions">
-                  <BaseSelect
-                    :model-value="videoDurationForShot(sb)"
-                    :options="videoDurationOptions"
-                    class="video-duration-select"
-                    placeholder="时长"
-                    @update:model-value="setVideoDurationForShot(sb, $event)"
+                  <input
+                    :value="videoDurationForShot(sb)"
+                    class="input video-duration-select"
+                    type="number"
+                    min="1"
+                    step="1"
+                    title="Duration seconds"
+                    @input="setVideoDurationForShot(sb, $event.target.value)"
+                    @blur="setVideoDurationForShot(sb, $event.target.value)"
                   />
                   <button class="btn btn-sm" :disabled="isPendingVideo(sb.id)" @click="genVid(sb)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
@@ -1724,11 +1727,15 @@
               searchable
             />
             <label v-if="promptDialog.kind === 'video'" class="prompt-preview-label">本次视频时长</label>
-            <BaseSelect
+            <input
               v-if="promptDialog.kind === 'video'"
-              v-model="promptDialog.duration"
-              :options="videoDurationOptions"
-              placeholder="选择时长"
+              v-model.number="promptDialog.duration"
+              class="input prompt-duration-input"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="10"
+              @blur="promptDialog.duration = normalizeVideoDurationInput(promptDialog.duration)"
             />
             <label class="prompt-preview-label">最终提交给模型的提示词</label>
             <textarea v-model="promptDialog.prompt" class="prompt-preview-textarea" spellcheck="false" />
@@ -1936,11 +1943,6 @@ const imageSizeOptions = [
   { label: '2:3 竖图 1024x1536', value: '1024x1536' },
   { label: '21:9 宽银幕 1456x624', value: '1456x624' },
 ]
-const videoDurationOptions = [
-  { label: '4 秒', value: 4 },
-  { label: '8 秒', value: 8 },
-  { label: '12 秒', value: 12 },
-]
 const videoDurationByShot = ref({})
 const promptDialog = ref({
   open: false,
@@ -1962,18 +1964,22 @@ const promptDialog = ref({
 })
 
 function defaultVideoDuration(sb) {
-  const value = Number(sb?.duration || 8)
-  if (value <= 4) return 4
-  if (value <= 8) return 8
-  return 12
+  return normalizeVideoDurationInput(sb?.duration)
 }
 
 function videoDurationForShot(sb) {
-  return Number(videoDurationByShot.value[sb.id] || defaultVideoDuration(sb))
+  return normalizeVideoDurationInput(videoDurationByShot.value[sb.id], defaultVideoDuration(sb))
 }
 
 function setVideoDurationForShot(sb, value) {
-  videoDurationByShot.value = { ...videoDurationByShot.value, [sb.id]: Number(value || defaultVideoDuration(sb)) }
+  videoDurationByShot.value = { ...videoDurationByShot.value, [sb.id]: normalizeVideoDurationInput(value, defaultVideoDuration(sb)) }
+}
+
+function normalizeVideoDurationInput(value, fallback = 10) {
+  const parsed = Math.round(Number(value))
+  const fallbackValue = Math.round(Number(fallback || 10))
+  if (!Number.isFinite(parsed) || parsed <= 0) return Number.isFinite(fallbackValue) && fallbackValue > 0 ? fallbackValue : 10
+  return parsed
 }
 
 function configLabel(config) {
@@ -4092,7 +4098,7 @@ async function genVid(sb) {
 }
 
 async function executeVid(sb, prompt, dialog) {
-  const duration = Number(dialog.duration || videoDurationForShot(sb))
+  const duration = normalizeVideoDurationInput(dialog.duration, videoDurationForShot(sb))
   setVideoDurationForShot(sb, duration)
   const params = {
     storyboard_id: sb.id,
@@ -5597,6 +5603,15 @@ onUnmounted(() => {
 }
 .prod-actions { display: flex; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid rgba(27, 41, 64, 0.08); }
 .prod-actions .btn { flex: 1; justify-content: center; }
+.video-duration-select {
+  width: 72px;
+  flex: 0 0 72px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.prompt-duration-input {
+  width: 120px;
+}
 
 /* Image viewer */
 .image-viewer-overlay {

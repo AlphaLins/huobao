@@ -155,10 +155,12 @@ watch(messages, async () => {
   right: 0;
   bottom: 64px;
   width: min(440px, calc(100vw - 32px));
-  height: min(650px, calc(100vh - 96px));
+  height: min(650px, calc(100dvh - 96px));
+  max-height: calc(100dvh - 96px);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-width: calc(100vw - 32px);
   overflow: hidden;
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -166,12 +168,14 @@ watch(messages, async () => {
   box-shadow: var(--shadow-elevated);
 }
 .assistant-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 .assistant-title {
   font-size: 14px;
@@ -184,6 +188,7 @@ watch(messages, async () => {
 }
 .assistant-actions,
 .action-buttons {
+  flex: 0 0 auto;
   display: flex;
   gap: 6px;
 }
@@ -197,9 +202,10 @@ watch(messages, async () => {
   font-size: 12px;
 }
 .assistant-messages {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding: 14px;
@@ -224,6 +230,8 @@ watch(messages, async () => {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 9px;
+  min-width: 0;
+  max-width: 100%;
 }
 .assistant-msg.user {
   grid-template-columns: minmax(0, 1fr) 34px;
@@ -254,11 +262,15 @@ watch(messages, async () => {
 }
 .assistant-content {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .assistant-bubble {
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  word-break: break-word;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -267,20 +279,45 @@ watch(messages, async () => {
   font-size: 13px;
   line-height: 1.6;
 }
-.assistant-bubble :deep(p) { margin: 0 0 8px; }
+.assistant-bubble :deep(p) {
+  max-width: 100%;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
 .assistant-bubble :deep(p:last-child) { margin-bottom: 0; }
 .assistant-bubble :deep(ul),
-.assistant-bubble :deep(ol) { margin: 0 0 8px 18px; padding: 0; }
+.assistant-bubble :deep(ol) {
+  max-width: 100%;
+  margin: 0 0 8px 18px;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.assistant-bubble :deep(a) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .assistant-bubble :deep(pre) {
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 10px;
   border-radius: var(--radius);
   background: var(--bg-3);
 }
 .assistant-bubble :deep(code) {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--bg-3);
+}
+.assistant-bubble :deep(pre code) {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 .assistant-action-list {
   display: grid;
@@ -307,6 +344,7 @@ watch(messages, async () => {
   color: var(--text-3);
 }
 .assistant-input {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
@@ -338,8 +376,11 @@ watch(messages, async () => {
     position: fixed;
     left: 10px;
     right: 10px;
+    top: max(10px, env(safe-area-inset-top));
     bottom: 76px;
     width: auto;
+    height: auto;
+    max-height: calc(100dvh - 96px);
   }
 }
 </style>

@@ -29,6 +29,13 @@ interface GenerateVideoParams {
 function normalizeVideoError(message: string) {
   const raw = String(message || '')
   if (
+    raw.includes('UND_ERR_CONNECT_TIMEOUT')
+    || raw.includes('Connect Timeout Error')
+    || raw.includes('api.apimart.ai:443')
+  ) {
+    return 'APIMart 网络连接超时：Node 后端连接 api.apimart.ai:443 超时。通常不是提示词或模型参数错误，而是本机 Node 进程没有走可用代理、网络出口无法直连 APIMart，或 APIMart 当前连接不稳定。请检查后端启动环境的 HTTPS_PROXY/HTTP_PROXY，或更换网络后重试。'
+  }
+  if (
     raw.includes('TLS handshake timeout')
     || raw.includes('aisandbox-pa.googleapis.com')
     || raw.includes('status=0')
@@ -43,6 +50,21 @@ function normalizeVideoError(message: string) {
     return 'Veo 上游风控拒绝：reCAPTCHA evaluation failed。请稍后重试，避免并发提交；如果持续出现，请更换 VipStar API Key、账号或网络出口。'
   }
   return raw
+}
+
+function formatFetchError(err: any, context?: Record<string, unknown>) {
+  const parts = [err?.message || String(err || '')]
+  const cause = err?.cause
+  if (cause) {
+    const causeText = [
+      cause.name,
+      cause.code,
+      cause.message,
+    ].filter(Boolean).join(': ')
+    if (causeText) parts.push(causeText)
+  }
+  if (context) parts.push(`context=${JSON.stringify(context)}`)
+  return parts.filter(Boolean).join(' | ')
 }
 
 function formatVideoPollError(message: string, raw?: unknown) {
@@ -62,6 +84,72 @@ function summarizeProviderRaw(raw: unknown, maxLength = 2000) {
   }
 }
 
+function normalizeRequestedVideoDuration(value?: number | null) {
+  const parsed = Math.round(Number(value || 10))
+  if (!Number.isFinite(parsed) || parsed <= 0) return 10
+  return parsed
+}
+
+function firstModelName(model?: string | null) {
+  const raw = String(model || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return String(parsed[0] || '').trim()
+  } catch {}
+  return raw
+}
+
+function validateVideoDuration(provider: string, model: string | null | undefined, duration: number) {
+  const normalizedProvider = String(provider || '').toLowerCase()
+  const modelName = firstModelName(model)
+  const lower = modelName.toLowerCase()
+
+  const failAllowed = (allowed: number[]) => {
+    throw new Error(`当前模型 ${modelName || normalizedProvider} 不支持时长 ${duration} 秒，支持的时长：${allowed.join(', ')}`)
+  }
+  const failRange = (min: number, max: number) => {
+    throw new Error(`当前模型 ${modelName || normalizedProvider} 支持 ${min}-${max} 秒，请重新输入`)
+  }
+
+  if (!Number.isInteger(duration) || duration <= 0) {
+    throw new Error(`视频时长必须是正整数，当前值：${duration}`)
+  }
+
+  if (normalizedProvider === 'apimart') {
+    if (lower.startsWith('sora')) {
+      const allowed = [4, 8, 12, 16, 20]
+      if (!allowed.includes(duration)) failAllowed(allowed)
+      return
+    }
+    if (lower.startsWith('omni') || lower.includes('omni-video')) {
+      const allowed = [4, 6, 8, 10]
+      if (!allowed.includes(duration)) failAllowed(allowed)
+      return
+    }
+    if (lower.startsWith('veo')) {
+      const allowed = [8]
+      if (!allowed.includes(duration)) failAllowed(allowed)
+      return
+    }
+    if (lower.startsWith('grok') || lower.includes('grok-video')) {
+      if (duration < 6 || duration > 30) failRange(6, 30)
+      return
+    }
+    return
+  }
+
+  if (normalizedProvider === 'sora' || lower.startsWith('sora') || lower.startsWith('omni') || lower.includes('omni-video')) {
+    const allowed = [4, 8, 12, 16, 20]
+    if (!allowed.includes(duration)) failAllowed(allowed)
+    return
+  }
+
+  if (normalizedProvider === 'volcengine') {
+    if (duration < 4 || duration > 12) failRange(4, 12)
+  }
+}
+
 export async function generateVideo(params: GenerateVideoParams): Promise<number> {
   const ts = now()
   const config = params.configId
@@ -72,6 +160,8 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
   const provider = config.provider === 'apimart'
     ? 'apimart'
     : detectVideoModelFamily(model) || config.provider
+  const duration = normalizeRequestedVideoDuration(params.duration)
+  validateVideoDuration(provider, model, duration)
 
   // 注入风格提示词
   const styledPrompt = params.promptMode === 'custom_final'
@@ -89,7 +179,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     firstFrameUrl: params.firstFrameUrl,
     lastFrameUrl: params.lastFrameUrl,
     referenceImageUrls: params.referenceImageUrls ? JSON.stringify(params.referenceImageUrls) : null,
-    duration: params.duration || 5,
+    duration,
     aspectRatio: params.aspectRatio || '16:9',
     status: 'processing',
     createdAt: ts,
@@ -104,7 +194,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     storyboardId: params.storyboardId,
     dramaId: params.dramaId,
     referenceMode: params.referenceMode || 'none',
-    duration: params.duration || 5,
+    duration,
   })
   logTaskPayload('VideoTask', 'enqueue params', {
     id: lastId,
@@ -186,11 +276,22 @@ async function processVideoGeneration(id: number, config: AIConfig) {
       body: summarizeRequestBody(body),
     })
 
-    const resp = await fetch(url, {
-      method,
-      headers,
-      body: body instanceof FormData ? body : JSON.stringify(body),
-    })
+    let resp: Response
+    try {
+      resp = await fetch(url, {
+        method,
+        headers,
+        body: body instanceof FormData ? body : JSON.stringify(body),
+      })
+    } catch (err: any) {
+      throw new Error(formatFetchError(err, {
+        phase: 'create-video',
+        provider: config.provider,
+        resolvedProvider,
+        url: redactUrl(url),
+        model: record.model,
+      }))
+    }
 
     if (!resp.ok) {
       const responseText = await resp.text()
@@ -315,7 +416,18 @@ async function pollVideoTask(id: number, config: AIConfig, taskId: string, story
         url: redactUrl(url),
         attempt: i + 1,
       })
-      const resp = await fetch(url, { method, headers })
+      let resp: Response
+      try {
+        resp = await fetch(url, { method, headers })
+      } catch (err: any) {
+        throw new Error(formatFetchError(err, {
+          phase: 'poll-video',
+          provider: config.provider,
+          url: redactUrl(url),
+          taskId,
+          attempt: i + 1,
+        }))
+      }
       if (!resp.ok) {
         const bodyText = await resp.text()
         const errorMsg = formatVideoPollError(`Poll API error ${resp.status}: ${bodyText}`, bodyText)

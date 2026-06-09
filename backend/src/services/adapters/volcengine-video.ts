@@ -103,8 +103,7 @@ export class VolcEngineVideoAdapter implements VideoProviderAdapter {
   }
 
   private normalizeDuration(duration?: number | null): number {
-    const parsed = Math.round(Number(duration || 5))
-    if (!Number.isFinite(parsed)) return 5
-    return Math.min(12, Math.max(4, parsed))
+    const parsed = Math.round(Number(duration || 10))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 10
   }
 }

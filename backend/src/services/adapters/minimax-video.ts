@@ -17,7 +17,7 @@ export class MiniMaxVideoAdapter implements VideoProviderAdapter {
 
   buildGenerateRequest(config: AIConfig, record: VideoGenerationRecord): ProviderRequest {
     let promptText = record.prompt || ''
-    promptText += `  --ratio ${record.aspectRatio || '16:9'}  --dur ${record.duration || 5}`
+    promptText += `  --ratio ${record.aspectRatio || '16:9'}  --dur ${record.duration || 10}`
 
     const content: any[] = [{ type: 'text', text: promptText }]
 

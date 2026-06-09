@@ -108,11 +108,11 @@ function firstString(value: unknown): string | null {
 function videoParamsForModel(model: string, record: VideoGenerationRecord) {
   const lower = model.toLowerCase()
   const aspectRatio = normalizeAspectRatio(record.aspectRatio)
-  const duration = Number(record.duration || 8)
+  const duration = Math.round(Number(record.duration || 10))
 
   if (lower.startsWith('sora')) {
     return {
-      duration: closest(duration, [4, 8, 12, 16, 20]),
+      duration,
       resolution: lower.includes('pro') ? resolutionFromModel(model, '1080p') : resolutionFromModel(model, '720p'),
       orientation: aspectRatio === '9:16' ? 'portrait' : 'landscape',
     }
@@ -120,7 +120,7 @@ function videoParamsForModel(model: string, record: VideoGenerationRecord) {
 
   if (lower.startsWith('omni') || lower.includes('omni-video')) {
     return {
-      duration: closest(duration, [4, 6, 8, 10]),
+      duration,
       resolution: resolutionFromModel(model, '720p'),
       aspect_ratio: aspectRatio,
     }
@@ -137,9 +137,9 @@ function videoParamsForModel(model: string, record: VideoGenerationRecord) {
 
   if (lower.startsWith('grok') || lower.includes('grok-video')) {
     return {
-      duration: clamp(duration, 6, 30),
-      size: aspectRatio === '9:16' ? 'vertical' : 'horizontal',
-      quality: qualityFromModel(model),
+      duration,
+      size: normalizeGrokAspectRatio(record.aspectRatio),
+      quality: grokQualityFromModel(model),
     }
   }
 
@@ -192,12 +192,10 @@ function normalizeAspectRatio(ratio?: string | null) {
   return ratio === '9:16' ? '9:16' : '16:9'
 }
 
-function closest(value: number, allowed: number[]) {
-  return allowed.reduce((best, current) => Math.abs(current - value) < Math.abs(best - value) ? current : best, allowed[0])
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
+function normalizeGrokAspectRatio(ratio?: string | null) {
+  const normalized = String(ratio || '').trim()
+  if (['16:9', '9:16', '1:1', '3:2', '2:3'].includes(normalized)) return normalized
+  return normalizeAspectRatio(ratio)
 }
 
 function resolutionFromModel(model: string, fallback: string) {
@@ -209,11 +207,10 @@ function resolutionFromModel(model: string, fallback: string) {
   return fallback
 }
 
-function qualityFromModel(model: string) {
+function grokQualityFromModel(model: string) {
   const lower = model.toLowerCase()
-  if (lower.includes('high') || lower.includes('pro')) return 'high'
-  if (lower.includes('low') || lower.includes('fast')) return 'low'
-  return 'medium'
+  if (lower.includes('480')) return '480p'
+  return '720p'
 }
 
 function normalizeTaskStatus(result: any): VideoPollResponse['status'] {

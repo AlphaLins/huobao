@@ -396,7 +396,14 @@
           <input v-model.number="cfgForm.priority" class="input" type="number" min="0" max="999" />
           <span class="field-hint">数值越高越优先。工作台默认会优先使用同类型里优先级最高的启用配置。</span>
         </label>
-        <label class="field"><span class="field-label">API Key</span><input v-model="cfgForm.api_key" class="input" type="password" placeholder="sk-..." /></label>
+        <label class="field">
+          <span class="field-label">
+            API Key
+            <span v-if="cfgEditId" :class="['tag', cfgHasSavedKey ? 'tag-success' : 'tag-error']">{{ cfgHasSavedKey ? '当前已保存密钥' : '当前无密钥' }}</span>
+          </span>
+          <input v-model="cfgForm.api_key" class="input" type="password" :placeholder="cfgEditId ? '留空表示保留当前密钥；输入新 Key 才会替换' : 'sk-...'" autocomplete="new-password" />
+          <span v-if="cfgEditId" class="field-hint">出于安全考虑，已保存的 API Key 不会明文回显；保存时留空不会清空原密钥。</span>
+        </label>
         <label class="field"><span class="field-label">Base URL</span><input v-model="cfgForm.base_url" class="input" placeholder="https://..." /></label>
         <div class="endpoint-hint">
           <span class="dim">实际端点前缀：</span>
@@ -508,6 +515,7 @@ watch(showAdvanced, (v) => {
 const cfgs = ref([])
 const cfgDialog = ref(false)
 const cfgEditId = ref(null)
+const cfgHasSavedKey = ref(false)
 const presetDialog = ref(false)
 const cfgTesting = ref(false)
 const cfgTestResult = ref(null)
@@ -536,7 +544,7 @@ const providerPresets = {
     volcengine: { label: '火山推荐', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedream-4-0-250828'] },
   },
   video: {
-    apimart: { label: 'APIMart 视频', baseUrl: 'https://api.apimart.ai', models: ['sora-2', 'Omni-Flash-Ext', 'veo3.1-fast', 'grok-imagine-1.0-video-apimart'] },
+    apimart: { label: 'APIMart 视频', baseUrl: 'https://api.apimart.ai', models: ['sora-2', 'Omni-Flash-Ext', 'veo3.1-fast', 'grok-imagine-1.5-video-apimart'] },
     volcengine: { label: '火宝视频', baseUrl: 'https://api.chatfire.site/volcengine', models: ['doubao-seedance-1-5-pro-251215'] },
     vidu: { label: 'Vidu 推荐', baseUrl: 'https://api.vidu.com', models: ['viduq3-turbo'] },
     ali: { label: '阿里推荐', baseUrl: 'https://dashscope.aliyuncs.com', models: ['wan2.6-i2v-flash'] },
@@ -598,6 +606,7 @@ async function toggleCfg(c) { await aiConfigAPI.update(c.id, { is_active: !c.is_
 async function delCfg(id) { await aiConfigAPI.del(id); toast.success('已删除'); loadCfgs() }
 function startAddCfg(t) {
   cfgEditId.value = null
+  cfgHasSavedKey.value = false
   cfgTestResult.value = null
   Object.assign(cfgForm, { name: '', provider: '', api_key: '', base_url: '', modelStr: '', service_type: t, priority: 0 })
   const firstPreset = presetsByType(t)[0]
@@ -606,11 +615,12 @@ function startAddCfg(t) {
 }
 function startEditCfg(c) {
   cfgEditId.value = c.id
+  cfgHasSavedKey.value = Boolean(c.api_key)
   cfgTestResult.value = null
   Object.assign(cfgForm, {
     name: c.name || '',
     provider: c.provider,
-    api_key: c.api_key || '',
+    api_key: '',
     base_url: c.base_url || '',
     modelStr: fmtModel(c.model),
     service_type: c.service_type,
@@ -632,6 +642,10 @@ async function testCfgPayload(payload) {
 }
 async function testDraftCfg() {
   const models = cfgForm.modelStr.split(',').map(s => s.trim()).filter(Boolean)
+  if (cfgEditId.value && !cfgForm.api_key.trim()) {
+    await testSavedCfg(cfgEditId.value)
+    return
+  }
   await testCfgPayload({
     service_type: cfgForm.service_type,
     provider: resolveProviderForModels(cfgForm.service_type, cfgForm.provider, models),
@@ -640,23 +654,32 @@ async function testDraftCfg() {
     model: models,
   })
 }
+async function testSavedCfg(id) {
+  cfgTesting.value = true
+  try {
+    cfgTestResult.value = await aiConfigAPI.testSaved(id)
+    if (cfgTestResult.value.reachable) toast.success('端点已响应')
+    else toast.warning('端点未通过测试')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    cfgTesting.value = false
+  }
+}
 async function testExistingCfg(c) {
   startEditCfg(c)
-  await testCfgPayload({
-    service_type: c.service_type,
-    provider: c.provider,
-    api_key: c.api_key || '',
-    base_url: c.base_url || '',
-    model: Array.isArray(c.model) ? c.model : [],
-  })
+  await testSavedCfg(c.id)
 }
 async function saveCfg() {
   if (!cfgForm.provider) { toast.warning('选择服务商'); return }
   const models = cfgForm.modelStr.split(',').map(s => s.trim()).filter(Boolean)
   const provider = resolveProviderForModels(cfgForm.service_type, cfgForm.provider, models)
+  const payload = { name: cfgForm.name, provider, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority }
+  if (cfgForm.api_key.trim()) payload.api_key = cfgForm.api_key.trim()
   try {
-    if (cfgEditId.value) await aiConfigAPI.update(cfgEditId.value, { name: cfgForm.name, provider, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
+    if (cfgEditId.value) await aiConfigAPI.update(cfgEditId.value, payload)
     else await aiConfigAPI.create({ service_type: cfgForm.service_type, provider, name: cfgForm.name || `${provider}-${cfgForm.service_type}`, api_key: cfgForm.api_key, base_url: cfgForm.base_url, model: models, priority: cfgForm.priority })
+    cfgHasSavedKey.value = Boolean(cfgForm.api_key.trim() || cfgHasSavedKey.value)
     cfgDialog.value = false; toast.success('已保存'); loadCfgs()
   } catch (e) { toast.error(e.message) }
 }

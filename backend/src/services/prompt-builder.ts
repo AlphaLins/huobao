@@ -208,7 +208,7 @@ export function previewVideoPrompt(body: any) {
     dramaId: episode?.dramaId || body.drama_id,
     configId: body.config_id ?? episode?.videoConfigId,
     basePrompt,
-    duration: Number(body.duration || storyboard.duration || 5),
+    duration: Number(body.duration || storyboard.duration || 10),
     referenceMode,
     firstFrameUrl,
     lastFrameUrl,

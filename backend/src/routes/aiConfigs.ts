@@ -132,6 +132,74 @@ function buildProbe(serviceType: string, provider: string, baseUrl: string, mode
   }
 }
 
+async function runProbe(input: {
+  serviceType: string
+  provider: string
+  baseUrl: string
+  model?: string
+  apiKey?: string
+}) {
+  const probe = buildProbe(input.serviceType, input.provider, input.baseUrl, input.model, input.apiKey)
+  const probeUrl = redactUrl(probe.url)
+
+  logTaskProgress('AIConfig', 'probe-start', {
+    serviceType: input.serviceType,
+    provider: input.provider,
+    method: probe.method,
+    url: probeUrl,
+  })
+
+  try {
+    const resp = await fetch(probe.url, {
+      method: probe.method,
+      headers: probe.headers,
+      body: probe.body ? JSON.stringify(probe.body) : undefined,
+    })
+    const text = await resp.text()
+    const reachable = [200, 204, 400, 401, 403].includes(resp.status)
+    const payload = {
+      ok: resp.ok,
+      reachable,
+      status: resp.status,
+      status_text: resp.statusText,
+      method: probe.method,
+      url: probeUrl,
+      message: reachable
+        ? (resp.ok ? '端点可访问，认证与路径基本正常' : '端点已响应，请根据状态码判断认证或路径是否正确')
+        : '端点未按预期响应，请检查 Base URL 和代理前缀',
+      response_preview: text.slice(0, 240),
+    }
+    if (reachable) {
+      logTaskSuccess('AIConfig', 'probe-done', {
+        provider: input.provider,
+        status: resp.status,
+        url: probeUrl,
+      })
+    } else {
+      logTaskError('AIConfig', 'probe-unexpected', {
+        provider: input.provider,
+        status: resp.status,
+        url: probeUrl,
+      })
+    }
+    return payload
+  } catch (error: any) {
+    logTaskError('AIConfig', 'probe-failed', {
+      provider: input.provider,
+      url: probeUrl,
+      error: error.message,
+    })
+    return {
+      ok: false,
+      reachable: false,
+      method: probe.method,
+      url: probeUrl,
+      message: error.message || '请求失败',
+      response_preview: '',
+    }
+  }
+}
+
 // GET /ai-configs?service_type=text
 app.get('/', async (c) => {
   const serviceType = c.req.query('service_type')
@@ -266,65 +334,29 @@ app.post('/test', requireAdmin, async (c) => {
   }
 
   const model = Array.isArray(body.model) ? body.model[0] : body.model
-  const probe = buildProbe(body.service_type, body.provider, body.base_url, model, body.api_key)
-  const probeUrl = redactUrl(probe.url)
-
-  logTaskProgress('AIConfig', 'probe-start', {
+  return success(c, await runProbe({
     serviceType: body.service_type,
     provider: body.provider,
-    method: probe.method,
-    url: probeUrl,
-  })
+    baseUrl: body.base_url,
+    model,
+    apiKey: body.api_key,
+  }))
+})
 
-  try {
-    const resp = await fetch(probe.url, {
-      method: probe.method,
-      headers: probe.headers,
-      body: probe.body ? JSON.stringify(probe.body) : undefined,
-    })
-    const text = await resp.text()
-    const reachable = [200, 204, 400, 401, 403].includes(resp.status)
-    const payload = {
-      ok: resp.ok,
-      reachable,
-      status: resp.status,
-      status_text: resp.statusText,
-      method: probe.method,
-      url: probeUrl,
-      message: reachable
-        ? (resp.ok ? '端点可访问，认证与路径基本正常' : '端点已响应，请根据状态码判断认证或路径是否正确')
-        : '端点未按预期响应，请检查 Base URL 和代理前缀',
-      response_preview: text.slice(0, 240),
-    }
-    if (reachable) {
-      logTaskSuccess('AIConfig', 'probe-done', {
-        provider: body.provider,
-        status: resp.status,
-        url: probeUrl,
-      })
-    } else {
-      logTaskError('AIConfig', 'probe-unexpected', {
-        provider: body.provider,
-        status: resp.status,
-        url: probeUrl,
-      })
-    }
-    return success(c, payload)
-  } catch (error: any) {
-    logTaskError('AIConfig', 'probe-failed', {
-      provider: body.provider,
-      url: probeUrl,
-      error: error.message,
-    })
-    return success(c, {
-      ok: false,
-      reachable: false,
-      method: probe.method,
-      url: probeUrl,
-      message: error.message || '请求失败',
-      response_preview: '',
-    })
-  }
+// POST /ai-configs/:id/test
+app.post('/:id/test', requireAdmin, async (c) => {
+  const id = Number(c.req.param('id'))
+  const [row] = db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, id)).all()
+  if (!row) return notFound(c)
+
+  const models = row.model ? JSON.parse(row.model) : []
+  return success(c, await runProbe({
+    serviceType: row.serviceType,
+    provider: row.provider || '',
+    baseUrl: row.baseUrl,
+    model: models[0] || '',
+    apiKey: row.apiKey,
+  }))
 })
 
 // GET /ai-configs/:id
@@ -348,7 +380,9 @@ app.put('/:id', requireAdmin, async (c) => {
   if ('provider' in body) updates.provider = body.provider
   if ('name' in body) updates.name = body.name
   if ('base_url' in body) updates.baseUrl = body.base_url
-  if ('api_key' in body && body.api_key !== '***') updates.apiKey = body.api_key
+  if ('api_key' in body && body.api_key !== '***' && String(body.api_key || '').trim()) {
+    updates.apiKey = String(body.api_key).trim()
+  }
   if ('model' in body) updates.model = JSON.stringify(body.model)
   if ('priority' in body) updates.priority = body.priority
   if ('is_active' in body) updates.isActive = body.is_active

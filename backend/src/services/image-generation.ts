@@ -1,6 +1,6 @@
 import { db, schema } from '../db/index.js'
 import { eq } from 'drizzle-orm'
-import { getActiveConfig, getConfigById } from './ai.js'
+import { compareActiveConfigs, getActiveConfig, getConfigById } from './ai.js'
 import { now } from '../utils/response.js'
 import { downloadFile, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
 import { getImageAdapter } from './adapters/registry'
@@ -113,7 +113,7 @@ export async function syncImageGenerationResult(id: number) {
     .where(eq(schema.aiServiceConfigs.serviceType, 'image'))
     .all()
     .filter(row => row.isActive && row.provider === record.provider)
-    .sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    .sort(compareActiveConfigs)
   const configRow = configRows[0]
   if (!configRow) throw new Error(`No active image config for provider ${record.provider}`)
 

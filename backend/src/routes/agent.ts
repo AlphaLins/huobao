@@ -2,7 +2,7 @@
  * Agent 聊天路由 — 非流式版本
  */
 import { Hono } from 'hono'
-import { createAgent, getAgentGenerateOptions, validAgentTypes } from '../agents/index.js'
+import { createAgent, getAgentGenerateOptions, getResolvedAgentConfigDebug, validAgentTypes } from '../agents/index.js'
 import { success, badRequest } from '../utils/response.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
@@ -98,7 +98,12 @@ app.post('/:type/chat', async (c) => {
 app.get('/:type/debug', async (c) => {
   const agentType = c.req.param('type')
   if (!validAgentTypes.includes(agentType)) return badRequest(c, 'Invalid agent type')
-  return success(c, { agent_type: agentType, valid: true })
+  const dramaId = Number(c.req.query('drama_id') || 0)
+  return success(c, {
+    agent_type: agentType,
+    valid: true,
+    resolved_config: dramaId ? getResolvedAgentConfigDebug(agentType, dramaId) : null,
+  })
 })
 
 export default app

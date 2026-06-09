@@ -18,7 +18,7 @@ echo.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ports=@(3013,5679); foreach($p in $ports){ Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop; Write-Host \"Stopped process on port $p\" } catch {} } }"
 
-start "Huobao Backend 5679" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command "Set-Location '%~dp0backend'; npm run dev"
+start "Huobao Backend 5679" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command ". '%~dp0scripts\use-system-proxy.ps1'; Set-Location '%~dp0backend'; npm run dev"
 timeout /t 3 /nobreak >nul
 start "Huobao Frontend 3013" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -Command "Set-Location '%~dp0frontend'; npm run dev"
 
